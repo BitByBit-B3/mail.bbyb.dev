@@ -4,8 +4,10 @@
 
 /**
  * Shared attachment storage logic.
- * Eliminates the triplicated atob → Uint8Array → R2.put pattern.
+ * Eliminates the triplicated attachment materialization and R2.put pattern.
  */
+import type { ComposeAttachmentPayload } from "../../shared/compose-attachments";
+import type { SendEmailParams } from "../email-sender";
 import type { Env } from "../types";
 
 export interface StoredAttachment {
@@ -15,43 +17,160 @@ export interface StoredAttachment {
 	mimetype: string;
 	size: number;
 	content_id: string | null;
-	disposition: string;
+	disposition: string | null;
+}
+
+export interface PersistedAttachmentRecord extends StoredAttachment {}
+
+export interface MaterializedAttachment {
+	filename: string;
+	mimetype: string;
+	size: number;
+	contentId?: string;
+	disposition: "attachment" | "inline";
+	bytes: Uint8Array;
+}
+
+type AttachmentLookup = (
+	attachmentId: string,
+) => Promise<PersistedAttachmentRecord | null>;
+
+function sanitizeFilename(filename: string) {
+	return (filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
+}
+
+function decodeBase64(content: string) {
+	const binaryStr = atob(content);
+	return Uint8Array.from(binaryStr, (char) => char.charCodeAt(0));
+}
+
+function encodeBase64(bytes: Uint8Array) {
+	const CHUNK_SIZE = 0x8000;
+	let binary = "";
+	for (let index = 0; index < bytes.length; index += CHUNK_SIZE) {
+		const chunk = bytes.subarray(index, index + CHUNK_SIZE);
+		binary += String.fromCharCode(...chunk);
+	}
+	return btoa(binary);
+}
+
+function normalizeDisposition(
+	disposition?: string | null,
+): "attachment" | "inline" {
+	return disposition === "inline" ? "inline" : "attachment";
+}
+
+async function materializeAttachment(
+	bucket: Env["BUCKET"],
+	attachment: ComposeAttachmentPayload,
+	lookupAttachment?: AttachmentLookup,
+): Promise<MaterializedAttachment> {
+	if (attachment.kind === "upload") {
+		const bytes = decodeBase64(attachment.content);
+		return {
+			filename: sanitizeFilename(attachment.filename),
+			mimetype: attachment.type || "application/octet-stream",
+			size: bytes.byteLength,
+			contentId: attachment.contentId,
+			disposition: attachment.disposition,
+			bytes,
+		};
+	}
+
+	if (!lookupAttachment) {
+		throw new Error("Stored attachments are not supported in this context.");
+	}
+
+	const stored = await lookupAttachment(attachment.attachmentId);
+	if (!stored || stored.email_id !== attachment.emailId) {
+		throw new Error("Attachment not found.");
+	}
+
+	const objectKey = `attachments/${stored.email_id}/${stored.id}/${stored.filename}`;
+	const object = await bucket.get(objectKey);
+	if (!object) {
+		throw new Error("Attachment file not found.");
+	}
+
+	const bytes = new Uint8Array(await object.arrayBuffer());
+	return {
+		filename: stored.filename,
+		mimetype: stored.mimetype || attachment.type || "application/octet-stream",
+		size: bytes.byteLength,
+		contentId: stored.content_id || attachment.contentId,
+		disposition: normalizeDisposition(stored.disposition || attachment.disposition),
+		bytes,
+	};
+}
+
+export async function materializeComposeAttachments(
+	bucket: Env["BUCKET"],
+	attachments?: ComposeAttachmentPayload[],
+	lookupAttachment?: AttachmentLookup,
+): Promise<MaterializedAttachment[]> {
+	if (!attachments?.length) return [];
+	return Promise.all(
+		attachments.map((attachment) =>
+			materializeAttachment(bucket, attachment, lookupAttachment),
+		),
+	);
 }
 
 /**
- * Store base64-encoded attachments to R2 and return metadata for the DO.
+ * Store materialized attachments to R2 and return metadata for the DO.
  */
-export async function storeAttachments(
+export async function storeMaterializedAttachments(
 	bucket: Env["BUCKET"],
 	emailId: string,
-	attachments?: {
-		content: string;
-		filename: string;
-		type: string;
-		disposition: string;
-		contentId?: string;
-	}[],
+	attachments: MaterializedAttachment[],
 ): Promise<StoredAttachment[]> {
-	if (!attachments?.length) return [];
+	if (!attachments.length) return [];
 
 	const results: StoredAttachment[] = [];
 	for (const att of attachments) {
 		const attachmentId = crypto.randomUUID();
-		// Sanitize filename to prevent path traversal in R2 keys
-		const safeFilename = (att.filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
+		const safeFilename = sanitizeFilename(att.filename);
 		const key = `attachments/${emailId}/${attachmentId}/${safeFilename}`;
-		const binaryStr = atob(att.content);
-		const bytes = Uint8Array.from(binaryStr, (c) => c.charCodeAt(0));
-		await bucket.put(key, bytes);
+		await bucket.put(key, att.bytes, {
+			httpMetadata: { contentType: att.mimetype },
+		});
 		results.push({
 			id: attachmentId,
 			email_id: emailId,
 			filename: safeFilename,
-			mimetype: att.type,
-			size: bytes.byteLength,
+			mimetype: att.mimetype,
+			size: att.size,
 			content_id: att.contentId || null,
 			disposition: att.disposition,
 		});
 	}
 	return results;
+}
+
+export function toSendEmailAttachments(
+	attachments: MaterializedAttachment[],
+): SendEmailParams["attachments"] {
+	if (attachments.length === 0) return undefined;
+
+	return attachments.map((attachment) => ({
+		content: encodeBase64(attachment.bytes),
+		filename: attachment.filename,
+		type: attachment.mimetype,
+		disposition: attachment.disposition,
+		...(attachment.contentId ? { contentId: attachment.contentId } : {}),
+	}));
+}
+
+export async function deleteAttachmentBlobs(
+	bucket: Env["BUCKET"],
+	emailId: string,
+	attachments: Array<{ id: string; filename: string }>,
+) {
+	if (attachments.length === 0) return;
+	await bucket.delete(
+		attachments.map(
+			(attachment) =>
+				`attachments/${emailId}/${attachment.id}/${attachment.filename}`,
+		),
+	);
 }

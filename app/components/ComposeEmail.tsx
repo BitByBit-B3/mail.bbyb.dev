@@ -6,6 +6,7 @@ import { Banner, Button, Dialog, Input, Text } from "@cloudflare/kumo";
 import { FloppyDiskIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import ComposeAttachments from "./ComposeAttachments";
 import RichTextEditor from "./RichTextEditor";
 import { useUIStore } from "~/hooks/useUIStore";
 
@@ -30,6 +31,10 @@ export default function ComposeEmail() {
 		setSubject,
 		body,
 		setBody,
+		attachments,
+		isAddingAttachments,
+		addAttachments,
+		removeAttachment,
 		error,
 		isSavingDraft,
 		isSending,
@@ -100,6 +105,13 @@ export default function ComposeEmail() {
 						onChange={(e) => setSubject(e.target.value)}
 						required
 					/>
+					<ComposeAttachments
+						attachments={attachments}
+						isAddingAttachments={isAddingAttachments}
+						disabled={isSending || isSavingDraft}
+						onAddFiles={addAttachments}
+						onRemoveAttachment={removeAttachment}
+					/>
 					<div>
 						<Text size="sm" DANGEROUS_className="font-medium mb-1.5 block">
 							Message
@@ -122,7 +134,7 @@ export default function ComposeEmail() {
 								variant="secondary"
 								size="sm"
 								loading={isSavingDraft}
-								disabled={isSending}
+								disabled={isSending || isAddingAttachments}
 								icon={<FloppyDiskIcon size={14} />}
 								onClick={handleSaveDraft}
 							>
@@ -133,7 +145,7 @@ export default function ComposeEmail() {
 								variant="primary"
 								size="sm"
 								loading={isSending}
-								disabled={isSavingDraft || isSending}
+								disabled={isSavingDraft || isSending || isAddingAttachments}
 								icon={<PaperPlaneTiltIcon size={14} />}
 							>
 								{isSending ? "Sending..." : "Send"}

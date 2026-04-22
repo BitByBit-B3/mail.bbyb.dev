@@ -4,7 +4,12 @@
 
 import type { Context } from "hono";
 import { sendEmail } from "../email-sender";
-import { storeAttachments } from "../lib/attachments";
+import {
+	materializeComposeAttachments,
+	storeMaterializedAttachments,
+	toSendEmailAttachments,
+	type PersistedAttachmentRecord,
+} from "../lib/attachments";
 import type { EmailFull } from "../lib/schemas";
 import {
 	validateSender,
@@ -20,6 +25,12 @@ import type { MailboxContext } from "../lib/mailbox";
 
 type AppContext = Context<MailboxContext>;
 type RateLimitStub = { checkSendRateLimit: () => Promise<string | null> };
+
+function lookupAttachment(c: AppContext, attachmentId: string) {
+	return c.var.mailboxStub.getAttachment(
+		attachmentId,
+	) as Promise<PersistedAttachmentRecord | null>;
+}
 
 export async function handleReplyEmail(c: AppContext) {
 	const mailboxId = c.req.param("mailboxId") ?? "";
@@ -53,7 +64,16 @@ export async function handleReplyEmail(c: AppContext) {
 		return c.json({ error: rateLimitError }, 429);
 	}
 
-	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const materializedAttachments = await materializeComposeAttachments(
+		c.env.BUCKET,
+		attachments,
+		(attachmentId) => lookupAttachment(c, attachmentId),
+	);
+	const attachmentData = await storeMaterializedAttachments(
+		c.env.BUCKET,
+		messageId,
+		materializedAttachments,
+	);
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -96,13 +116,7 @@ export async function handleReplyEmail(c: AppContext) {
 			subject,
 			html,
 			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
+			attachments: toSendEmailAttachments(materializedAttachments),
 			headers: buildThreadingHeaders(originalMsgId, references),
 		}).catch((e) => {
 			console.error("Deferred reply delivery failed:", (e as Error).message);
@@ -148,7 +162,16 @@ export async function handleForwardEmail(c: AppContext) {
 		return c.json({ error: rateLimitError }, 429);
 	}
 
-	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const materializedAttachments = await materializeComposeAttachments(
+		c.env.BUCKET,
+		attachments,
+		(attachmentId) => lookupAttachment(c, attachmentId),
+	);
+	const attachmentData = await storeMaterializedAttachments(
+		c.env.BUCKET,
+		messageId,
+		materializedAttachments,
+	);
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -187,13 +210,7 @@ export async function handleForwardEmail(c: AppContext) {
 			subject,
 			html,
 			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
+			attachments: toSendEmailAttachments(materializedAttachments),
 		}).catch((e) => {
 			console.error("Deferred forward delivery failed:", (e as Error).message);
 		}),

@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { Email, Folder, Mailbox } from "~/types";
+import type { ComposeAttachmentPayload } from "shared/compose-attachments";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -92,6 +93,14 @@ interface EmailListResponse {
 	totalCount: number;
 }
 
+export interface SaveDraftResponse {
+	id: string;
+	status: string;
+	subject: string;
+	recipient: string;
+	date: string;
+}
+
 // ---------- API client ----------
 
 const api = {
@@ -137,11 +146,12 @@ const api = {
 			bcc?: string;
 			subject?: string;
 			body: string;
+			attachments?: ComposeAttachmentPayload[];
 			in_reply_to?: string;
 			thread_id?: string;
 			draft_id?: string;
 		},
-	) => post<{ draft_id: string }>(`/api/v1/mailboxes/${mailboxId}/drafts`, draft),
+	) => post<SaveDraftResponse>(`/api/v1/mailboxes/${mailboxId}/drafts`, draft),
 	replyToEmail: (mailboxId: string, emailId: string, email: unknown) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/reply`, email),
 	forwardEmail: (mailboxId: string, emailId: string, email: unknown) =>

@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ComposeAttachmentPayload } from "shared/compose-attachments";
 import api from "~/services/api";
 import type { Email } from "~/types";
 import { queryKeys } from "./keys";
@@ -243,6 +244,7 @@ export function useSaveDraft() {
 				bcc?: string;
 				subject?: string;
 				body: string;
+				attachments?: ComposeAttachmentPayload[];
 				in_reply_to?: string;
 				thread_id?: string;
 				draft_id?: string;

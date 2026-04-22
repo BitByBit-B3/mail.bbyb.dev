@@ -7,7 +7,14 @@ import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
-import { storeAttachments, type StoredAttachment } from "./lib/attachments";
+import {
+	deleteAttachmentBlobs,
+	materializeComposeAttachments,
+	storeMaterializedAttachments,
+	toSendEmailAttachments,
+	type PersistedAttachmentRecord,
+	type StoredAttachment,
+} from "./lib/attachments";
 import {
 	validateSender,
 	SenderValidationError,
@@ -16,7 +23,7 @@ import {
 	listMailboxes,
 	stripHtmlToText,
 } from "./lib/email-helpers";
-import { SendEmailRequestSchema } from "./lib/schemas";
+import { ComposeAttachmentSchema, SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { generateEmailDraft } from "./lib/ai";
 import { Folders } from "../shared/folders";
@@ -39,6 +46,7 @@ const DraftBody = z.object({
 	bcc: z.string().optional(),
 	subject: z.string().optional(),
 	body: z.string(),
+	attachments: z.array(ComposeAttachmentSchema).optional(),
 	in_reply_to: z.string().optional(),
 	thread_id: z.string().optional(),
 	draft_id: z.string().optional(),
@@ -63,6 +71,12 @@ function boolQuery(c: AppContext, key: string): boolean | undefined {
 	const v = c.req.query(key);
 	if (v === undefined || v === "") return undefined;
 	return v === "true" || v === "1";
+}
+
+function lookupAttachment(c: AppContext, attachmentId: string) {
+	return c.var.mailboxStub.getAttachment(
+		attachmentId,
+	) as Promise<PersistedAttachmentRecord | null>;
 }
 
 // -- App & middleware -----------------------------------------------
@@ -282,7 +296,16 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const stub = c.var.mailboxStub;
 	const rateLimitError = await (stub as any).checkSendRateLimit();
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
-	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const materializedAttachments = await materializeComposeAttachments(
+		c.env.BUCKET,
+		attachments,
+		(attachmentId) => lookupAttachment(c, attachmentId),
+	);
+	const attachmentData = await storeMaterializedAttachments(
+		c.env.BUCKET,
+		messageId,
+		materializedAttachments,
+	);
 
 	await stub.createEmail(Folders.SENT, {
 		id: messageId, subject, sender: fromEmail, recipient: toStr,
@@ -304,7 +327,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	c.executionCtx.waitUntil(
 		sendEmail(c.env.EMAIL, {
 			to, cc, bcc, from, subject, html, text,
-			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
+			attachments: toSendEmailAttachments(materializedAttachments),
 			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
 		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
 	);
@@ -313,17 +336,32 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 
 app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 	const mailboxId = c.req.param("mailboxId")!;
-	const { to, cc, bcc, subject, body, in_reply_to, thread_id, draft_id } = DraftBody.parse(await c.req.json());
+	const { to, cc, bcc, subject, body, attachments, in_reply_to, thread_id, draft_id } = DraftBody.parse(await c.req.json());
 	const stub = c.var.mailboxStub;
-	if (draft_id) await stub.deleteEmail(draft_id); // not atomic — create-then-delete would be safer
+	const materializedAttachments = await materializeComposeAttachments(
+		c.env.BUCKET,
+		attachments,
+		(attachmentId) => lookupAttachment(c, attachmentId),
+	);
+	if (draft_id) {
+		const deletedAttachments = await stub.deleteEmail(draft_id); // not atomic — create-then-delete would be safer
+		if (deletedAttachments?.length) {
+			await deleteAttachmentBlobs(c.env.BUCKET, draft_id, deletedAttachments);
+		}
+	}
 	const messageId = crypto.randomUUID();
 	const now = new Date().toISOString();
+	const attachmentData = await storeMaterializedAttachments(
+		c.env.BUCKET,
+		messageId,
+		materializedAttachments,
+	);
 	await stub.createEmail(Folders.DRAFT, {
 		id: messageId, subject: subject || "", sender: mailboxId.toLowerCase(),
 		recipient: (to || "").toLowerCase(), cc: cc?.toLowerCase() || null, bcc: bcc?.toLowerCase() || null,
 		date: now, body, in_reply_to: in_reply_to || null, email_references: null,
 		thread_id: thread_id || in_reply_to || messageId,
-	}, []);
+	}, attachmentData);
 	return c.json({ id: messageId, status: "draft", subject: subject || "", recipient: to || "", date: now }, 201);
 });
 
@@ -345,7 +383,7 @@ app.delete("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 	const id = c.req.param("id")!;
 	const attachments = await c.var.mailboxStub.deleteEmail(id);
 	if (attachments === null) return c.json({ error: "Not found" }, 404);
-	if (attachments.length > 0) await c.env.BUCKET.delete(attachments.map((att: any) => `attachments/${id}/${att.id}/${att.filename}`));
+	await deleteAttachmentBlobs(c.env.BUCKET, id, attachments);
 	return c.body(null, 204);
 });
 

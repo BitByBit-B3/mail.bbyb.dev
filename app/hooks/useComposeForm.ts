@@ -4,6 +4,7 @@
 
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { buildStoredComposeAttachments, readFilesAsComposeAttachments, serializeComposeAttachments, type ComposeAttachmentItem } from "~/lib/composeAttachments";
 import {
 	buildQuotedReplyBlock,
 	escapeHtml,
@@ -41,6 +42,7 @@ interface ComposeFormFields {
 	showCcBcc: boolean;
 	subject: string;
 	body: string;
+	attachments: ComposeAttachmentItem[];
 }
 
 const EMPTY_FIELDS: ComposeFormFields = {
@@ -50,6 +52,7 @@ const EMPTY_FIELDS: ComposeFormFields = {
 	showCcBcc: false,
 	subject: "",
 	body: "",
+	attachments: [],
 };
 
 function getPrefixedSubject(subject: string, prefix: "Re" | "Fwd") {
@@ -119,6 +122,7 @@ function buildInitialComposeFields(
 			showCcBcc: Boolean(draft.cc || draft.bcc),
 			subject: draft.subject || "",
 			body: draft.body || "",
+			attachments: buildStoredComposeAttachments(draft, { includeInline: true }),
 		};
 	}
 
@@ -153,6 +157,7 @@ function buildInitialComposeFields(
 			...EMPTY_FIELDS,
 			subject: getPrefixedSubject(original.subject, "Fwd"),
 			body: buildForwardBody(original, sigBlock),
+			attachments: buildStoredComposeAttachments(original),
 		};
 	}
 
@@ -178,9 +183,14 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [showCcBcc, setShowCcBcc] = useState(false);
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
+	const [attachments, setAttachments] = useState<ComposeAttachmentItem[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
+	const [isAddingAttachments, setIsAddingAttachments] = useState(false);
+	const [draftId, setDraftId] = useState<string | undefined>(
+		composeOptions.draftEmail?.id || undefined,
+	);
 	const lastInitializedOptionsRef = useRef<typeof composeOptions | null>(null);
 	const isDraftEdit = !!composeOptions.draftEmail;
 
@@ -207,21 +217,70 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setShowCcBcc(initialFields.showCcBcc);
 		setSubject(initialFields.subject);
 		setBody(initialFields.body);
+		setAttachments(initialFields.attachments);
+		setDraftId(composeOptions.draftEmail?.id || undefined);
 	}, [composeOptions, currentMailbox?.email, sigBlock]);
 
-	const handleSaveDraft = async () => {
-		if (!mailboxId || isSending) return; setIsSavingDraft(true); setError(null);
+	const addAttachments = async (files: FileList | null) => {
+		if (!files || files.length === 0) return;
+		setIsAddingAttachments(true);
+
 		try {
-			await saveDraftMutation.mutateAsync({ mailboxId, draft: {
+			const results = await Promise.allSettled(
+				Array.from(files).map((file) => readFilesAsComposeAttachments([file])),
+			);
+			const addedAttachments = results
+				.flatMap((result) =>
+					result.status === "fulfilled" ? result.value : [],
+				);
+			const firstFailure = results.find(
+				(result): result is PromiseRejectedResult =>
+					result.status === "rejected",
+			);
+
+			if (addedAttachments.length > 0) {
+				setAttachments((current) => [...current, ...addedAttachments]);
+			}
+
+			if (firstFailure) {
+				const message =
+					firstFailure.reason instanceof Error
+						? firstFailure.reason.message
+						: "Failed to add one or more attachments.";
+				toastManager.add({ title: message, variant: "error" });
+			}
+		} finally {
+			setIsAddingAttachments(false);
+		}
+	};
+
+	const removeAttachment = (localId: string) => {
+		setAttachments((current) =>
+			current.filter((attachment) => attachment.localId !== localId),
+		);
+	};
+
+	const handleSaveDraft = async () => {
+		if (!mailboxId || isSending) return;
+		if (isAddingAttachments) {
+			setError("Wait for attachments to finish loading.");
+			return;
+		}
+		setIsSavingDraft(true);
+		setError(null);
+		try {
+			const savedDraft = await saveDraftMutation.mutateAsync({ mailboxId, draft: {
 				to,
 				cc: cc || undefined,
 				bcc: bcc || undefined,
 				subject,
 				body,
+				attachments: serializeComposeAttachments(attachments),
 				in_reply_to: composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to || undefined,
 				thread_id: composeOptions.originalEmail?.thread_id || composeOptions.draftEmail?.thread_id || undefined,
-				draft_id: composeOptions.draftEmail?.id || undefined,
+				draft_id: draftId,
 			} });
+			setDraftId(savedDraft.id);
 			toastManager.add({ title: "Draft saved!" });
 		}
 		catch (err: unknown) {
@@ -233,8 +292,11 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	};
 
 	const handleSend = async (e: FormEvent, onClose: () => void) => {
-		e.preventDefault(); if (isSending) return; setError(null);
+		e.preventDefault();
+		if (isSending) return;
+		setError(null);
 		if (!currentMailbox || !mailboxId) { setError("No mailbox selected."); return; }
+		if (isAddingAttachments) { setError("Wait for attachments to finish loading."); return; }
 		const toRecipients = splitEmailList(to);
 		if (toRecipients.length === 0) { setError("Add at least one recipient."); return; }
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
@@ -248,8 +310,9 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			subject,
 			html: body,
 			text: htmlToPlainText(body),
+			attachments: serializeComposeAttachments(attachments),
 		};
-		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
+		const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
 		setIsSending(true); toastManager.add({ title: "Sending email..." });
 		try {
 			if ((mode === "reply" || mode === "reply-all") && originalId) await replyMutation.mutateAsync({ mailboxId, emailId: originalId, email: emailData });
@@ -262,5 +325,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, attachments, isAddingAttachments, addAttachments, removeAttachment, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
 }

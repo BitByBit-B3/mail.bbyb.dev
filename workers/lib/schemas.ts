@@ -54,6 +54,28 @@ const RecipientFieldSchema = z.union([
 	z.array(z.string().email()).min(1),
 ]);
 
+export const ComposeAttachmentSchema = z.discriminatedUnion("kind", [
+	z.object({
+		kind: z.literal("upload"),
+		content: z.string(),
+		filename: z.string(),
+		type: z.string(),
+		size: z.number().int().nonnegative(),
+		disposition: z.enum(["attachment", "inline"]),
+		contentId: z.string().optional(),
+	}),
+	z.object({
+		kind: z.literal("stored"),
+		attachmentId: z.string(),
+		emailId: z.string(),
+		filename: z.string(),
+		type: z.string(),
+		size: z.number().int().nonnegative(),
+		disposition: z.enum(["attachment", "inline"]),
+		contentId: z.string().optional(),
+	}),
+]);
+
 export const ErrorResponseSchema = z.object({
 	error: z.string(),
 });
@@ -71,15 +93,7 @@ export const SendEmailRequestSchema = z
 		html: z.string().optional(),
 		text: z.string().optional(),
 		attachments: z
-			.array(
-				z.object({
-					content: z.string(), // base64 encoded
-					filename: z.string(),
-					type: z.string(),
-					disposition: z.enum(["attachment", "inline"]),
-					contentId: z.string().optional(),
-				}),
-			)
+			.array(ComposeAttachmentSchema)
 			.optional(),
 		in_reply_to: z.string().optional(),
 		references: z.array(z.string()).optional(),

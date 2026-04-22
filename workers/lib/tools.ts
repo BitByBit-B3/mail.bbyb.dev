@@ -28,6 +28,11 @@ import {
 } from "./email-helpers";
 import { verifyDraft } from "./ai";
 import { sendEmail } from "../email-sender";
+import {
+	deleteAttachmentBlobs,
+	materializeComposeAttachments,
+	storeMaterializedAttachments,
+} from "./attachments";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 
@@ -300,7 +305,29 @@ export async function toolUpdateDraft(
 		return { error: "Draft verification failed — keeping existing draft unchanged. Please try again." };
 	}
 
-	await stub.deleteEmail(params.draftId);
+	const materializedAttachments = await materializeComposeAttachments(
+		env.BUCKET,
+		(oldDraft.attachments ?? []).map((attachment) => ({
+			kind: "stored" as const,
+			attachmentId: attachment.id,
+			emailId: params.draftId,
+			filename: attachment.filename,
+			type: attachment.mimetype,
+			size: attachment.size,
+			disposition: attachment.disposition === "inline" ? "inline" : "attachment",
+			...(attachment.content_id ? { contentId: attachment.content_id } : {}),
+		})),
+		(attachmentId) => stub.getAttachment(attachmentId),
+	);
+	const deletedAttachments = await stub.deleteEmail(params.draftId);
+	if (deletedAttachments?.length) {
+		await deleteAttachmentBlobs(env.BUCKET, params.draftId, deletedAttachments);
+	}
+	const attachmentData = await storeMaterializedAttachments(
+		env.BUCKET,
+		newDraftId,
+		materializedAttachments,
+	);
 	await stub.createEmail(
 		Folders.DRAFT,
 		{
@@ -314,7 +341,7 @@ export async function toolUpdateDraft(
 			email_references: oldDraft.email_references || null,
 			thread_id: oldDraft.thread_id || newDraftId,
 		},
-		[],
+		attachmentData,
 	);
 
 	return {
@@ -369,7 +396,10 @@ export async function toolDiscardDraft(
 	if (email.folder_id !== Folders.DRAFT) {
 		return { error: "Cannot discard: email is not a draft" };
 	}
-	await stub.deleteEmail(draftId);
+	const deletedAttachments = await stub.deleteEmail(draftId);
+	if (deletedAttachments?.length) {
+		await deleteAttachmentBlobs(env.BUCKET, draftId, deletedAttachments);
+	}
 	return { status: "discarded", draftId };
 }
 
@@ -384,6 +414,9 @@ export async function toolDeleteEmail(
 	const result = await stub.deleteEmail(emailId);
 	if (result === null) {
 		return { error: "Email not found", emailId };
+	}
+	if (result.length > 0) {
+		await deleteAttachmentBlobs(env.BUCKET, emailId, result);
 	}
 	return { status: "deleted", emailId };
 }

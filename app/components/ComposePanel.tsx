@@ -14,6 +14,7 @@ import { useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { Editor } from "@tiptap/react";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import ComposeAttachments from "./ComposeAttachments";
 import RecipientInput from "./RecipientInput";
 import RichTextEditor from "./RichTextEditor";
 
@@ -36,6 +37,10 @@ export default function ComposePanel() {
 		setSubject,
 		body,
 		setBody,
+		attachments,
+		isAddingAttachments,
+		addAttachments,
+		removeAttachment,
 		error,
 		isSavingDraft,
 		isSending,
@@ -198,6 +203,14 @@ export default function ComposePanel() {
 							className="flex-1 bg-transparent border-0 outline-none text-sm text-kumo-default placeholder:text-kumo-subtle py-0.5"
 						/>
 					</div>
+
+					<ComposeAttachments
+						attachments={attachments}
+						isAddingAttachments={isAddingAttachments}
+						disabled={isSending || isSavingDraft}
+						onAddFiles={addAttachments}
+						onRemoveAttachment={removeAttachment}
+					/>
 				</div>
 
 				{/* AI prompt bar (refine mode) */}
@@ -307,7 +320,7 @@ export default function ComposePanel() {
 								variant="secondary"
 								size="sm"
 								loading={isSavingDraft}
-								disabled={isSending}
+								disabled={isSending || isAddingAttachments}
 								icon={<FloppyDiskIcon size={14} />}
 								onClick={handleSaveDraft}
 							>
@@ -318,7 +331,7 @@ export default function ComposePanel() {
 								variant="primary"
 								size="sm"
 								loading={isSending}
-								disabled={isSavingDraft || isSending}
+								disabled={isSavingDraft || isSending || isAddingAttachments}
 								icon={<PaperPlaneTiltIcon size={14} />}
 							>
 								{isSending ? "Sending…" : "Send"}

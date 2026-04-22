@@ -11,6 +11,7 @@ import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
 import EmailPanelToolbar from "~/components/email-panel/EmailPanelToolbar";
 import SingleMessageView from "~/components/email-panel/SingleMessageView";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
+import { buildStoredComposeAttachments, serializeComposeAttachments } from "~/lib/composeAttachments";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
 import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
@@ -126,6 +127,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				subject: target.subject || "(no subject)",
 				html: target.body || "",
 				text: target.body ? target.body.replace(/<[^>]*>/g, "").trim() : "",
+				attachments: serializeComposeAttachments(
+					buildStoredComposeAttachments(target, { includeInline: true }),
+				),
 			};
 			if (originalEmail) await replyMut.mutateAsync({ mailboxId, emailId: originalEmail.id, email: emailData }); else await sendEmailMut.mutateAsync({ mailboxId, email: emailData });
 			await deleteEmailMut.mutateAsync({ mailboxId, id: target.id });
