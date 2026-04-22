@@ -102,11 +102,17 @@ Infrastructure:
 
 ## Mailbox Usage
 
-After deploy, visit `mail.bbyb.dev` and create mailboxes for any `@bbyb.dev` address you want:
-- `contact@bbyb.dev`
-- `team@bbyb.dev`
-- `hello@bbyb.dev`
-- etc.
+After deploy, visit `mail.bbyb.dev` and create the following mailboxes (created via the app UI, no code change needed):
+
+| Address | Purpose |
+|---|---|
+| `contact@bbyb.dev` | Public-facing contact |
+| `team@bbyb.dev` | Internal team |
+| `hello@bbyb.dev` | General / welcome |
+| `info@bbyb.dev` | General information |
+| `support@bbyb.dev` | Support requests |
+| `methika.f@bbyb.dev` | Methika's personal mailbox |
+| `ranuga.d@bbyb.dev` | Ranuga's personal mailbox |
 
 Each mailbox is independent — inbound routes automatically, outbound sends from that mailbox's address.
 
