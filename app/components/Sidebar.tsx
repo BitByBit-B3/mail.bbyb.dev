@@ -122,7 +122,7 @@ export default function Sidebar() {
 		return found?.unreadCount || 0;
 	};
 
-	const handleCreateFolder = (e: React.FormEvent) => {
+	const handleCreateFolder = (e: React.SyntheticEvent<HTMLFormElement>) => {
 		e.preventDefault();
 		if (newFolderName.trim() && mailboxId) {
 			createFolderMutation.mutate({ mailboxId, name: newFolderName.trim() });
