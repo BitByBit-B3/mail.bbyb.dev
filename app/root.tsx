@@ -77,16 +77,11 @@ const KumoLink = forwardRef<
 
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en">
+		<html lang="en" className="dark">
 			<head>
 				<meta charSet="UTF-8" />
-				<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-				<link
-					rel="icon"
-					type="image/x-icon"
-					href="/favicon.ico"
-					sizes="48x48 32x32 16x16"
-				/>
+				<link rel="icon" type="image/png" href="/logo-dark.png" />
+				<link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48 32x32 16x16" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>B3 Internal Mail</title>
 				<Meta />
