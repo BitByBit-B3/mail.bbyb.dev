@@ -59,3 +59,42 @@ export function useDeleteMailbox() {
 		},
 	});
 }
+
+export function useUploadAvatar() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ mailboxId, file }: { mailboxId: string; file: File }) => {
+			const formData = new FormData();
+			formData.append("file", file);
+			const res = await fetch(`/api/v1/mailboxes/${mailboxId}/avatar`, {
+				method: "POST",
+				body: formData,
+			});
+			if (!res.ok) {
+				const err = (await res.json()) as { error?: string };
+				throw new Error(err.error || "Upload failed");
+			}
+			return res.json() as Promise<{ avatarUrl: string }>;
+		},
+		onSuccess: (_data, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.detail(mailboxId) });
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all });
+		},
+	});
+}
+
+export function useDeleteAvatar() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async (mailboxId: string) => {
+			const res = await fetch(`/api/v1/mailboxes/${mailboxId}/avatar`, {
+				method: "DELETE",
+			});
+			if (!res.ok) throw new Error("Delete failed");
+		},
+		onSuccess: (_data, mailboxId) => {
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.detail(mailboxId) });
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all });
+		},
+	});
+}
