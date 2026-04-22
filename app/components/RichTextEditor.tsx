@@ -12,6 +12,7 @@ import {
 	ListNumbersIcon,
 	MinusIcon,
 	QuotesIcon,
+	SparkleIcon,
 	TextBIcon,
 	TextItalicIcon,
 	TextStrikethroughIcon,
@@ -24,18 +25,24 @@ import LinkExtension from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type RefObject } from "react";
 
 interface RichTextEditorProps {
 	value: string;
 	onChange: (value: string) => void;
+	onAICompose?: () => void;
+	isGenerating?: boolean;
+	editorRef?: RefObject<Editor | null>;
 }
 
 export default function RichTextEditor({
 	value,
 	onChange,
+	onAICompose,
+	isGenerating,
+	editorRef,
 }: RichTextEditorProps) {
 	const editor = useEditor({
 		extensions: [
@@ -59,6 +66,10 @@ export default function RichTextEditor({
 			onChange(editor.getHTML());
 		},
 	});
+
+	useEffect(() => {
+		if (editorRef) (editorRef as { current: Editor | null }).current = editor;
+	}, [editor, editorRef]);
 
 	useEffect(() => {
 		if (editor && !editor.isDestroyed && value !== editor.getHTML()) {
@@ -228,6 +239,25 @@ export default function RichTextEditor({
 						aria-label="Redo"
 					/>
 				</Tooltip>
+
+				{onAICompose && (
+					<>
+						<div className="mx-1 h-5 w-px bg-kumo-fill" />
+						<Tooltip content="Write with AI" side="bottom" asChild>
+							<Button
+								variant="ghost"
+								shape="square"
+								size="sm"
+								icon={<SparkleIcon size={16} weight="fill" />}
+								onClick={onAICompose}
+								loading={isGenerating}
+								disabled={isGenerating}
+								aria-label="Write with AI"
+								className="text-kumo-accent"
+							/>
+						</Tooltip>
+					</>
+				)}
 			</div>
 
 			{/* Editor content */}

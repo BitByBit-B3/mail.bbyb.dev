@@ -9,7 +9,7 @@
  * - verifyDraft: reviews draft email bodies and removes agent/system artifacts.
  */
 
-import { escapeHtml, stripHtmlToText, textToHtml } from "./email-helpers";
+import { stripHtmlToText, textToHtml } from "./email-helpers";
 
 // ── Prompt Injection Scanner ───────────────────────────────────────
 

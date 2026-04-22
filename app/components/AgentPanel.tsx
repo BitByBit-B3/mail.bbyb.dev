@@ -405,7 +405,14 @@ function AgentChatConnected({
 					</div>
 				) : (
 					<div className="flex flex-col gap-3">
-						{messages.map((msg) => (
+						{messages.filter((msg) => {
+							if (msg.role === "user") return true;
+							return msg.parts.some(
+								(part) =>
+									(part.type === "text" && part.text.trim()) ||
+									getToolNameFromPart(part) !== null,
+							);
+						}).map((msg) => (
 							<MessageBubble
 								key={msg.id}
 								message={msg}

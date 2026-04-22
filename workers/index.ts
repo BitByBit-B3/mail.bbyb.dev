@@ -17,6 +17,7 @@ import {
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { generateEmailDraft } from "./lib/ai";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
@@ -194,6 +195,47 @@ app.delete("/api/v1/mailboxes/:mailboxId/avatar", async (c: AppContext) => {
 	}
 
 	return c.body(null, 204);
+});
+
+// -- AI Compose (streaming) -----------------------------------------
+
+app.post("/api/v1/mailboxes/:mailboxId/ai-compose", async (c: AppContext) => {
+	const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+	const prompt = typeof body.prompt === "string" ? body.prompt : undefined;
+	const subject = typeof body.subject === "string" ? body.subject : undefined;
+	const to = typeof body.to === "string" ? body.to : undefined;
+	const existing = typeof body.existing === "string" ? body.existing : undefined;
+
+	const sseStream = await generateEmailDraft(c.env.AI, { prompt, subject, to, existing });
+
+	// Transform SSE (data: {"response":"chunk"}\n\n) → plain text chunks
+	const decoder = new TextDecoder();
+	const encoder = new TextEncoder();
+	const plainStream = new TransformStream<Uint8Array, Uint8Array>({
+		transform(chunk, controller) {
+			const text = decoder.decode(chunk, { stream: true });
+			for (const line of text.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed.startsWith("data:")) continue;
+				const json = trimmed.slice(5).trim();
+				if (json === "[DONE]") continue;
+				try {
+					const parsed = JSON.parse(json) as { response?: string };
+					if (parsed.response) controller.enqueue(encoder.encode(parsed.response));
+				} catch {}
+			}
+		},
+	});
+
+	sseStream.pipeTo(plainStream.writable);
+
+	return new Response(plainStream.readable, {
+		headers: {
+			"Content-Type": "text/plain; charset=utf-8",
+			"X-Content-Type-Options": "nosniff",
+			"Cache-Control": "no-store",
+		},
+	});
 });
 
 // -- Emails ---------------------------------------------------------
