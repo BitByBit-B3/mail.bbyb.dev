@@ -144,7 +144,9 @@ export default function HomeRoute() {
 			<div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-16">
 				<div className="mb-8">
 					<div className="flex items-center gap-3 mb-6">
-						<img src="/logo-white.png" alt="B3" className="h-10 w-10 object-contain" />
+						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black shrink-0">
+							<img src="/logo-white.png" alt="B3" className="h-7 w-7 object-contain" />
+						</div>
 						<span className="text-xl font-bold text-kumo-default tracking-tight">B3 Internal Mail</span>
 					</div>
 					<div className="flex items-center justify-between">
