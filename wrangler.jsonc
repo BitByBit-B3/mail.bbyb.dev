@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "agentic-inbox",
+	"name": "b3-internal-mail",
 	"compatibility_date": "2025-11-28",
 	"main": "./workers/app.ts",
 	"observability": {
@@ -10,12 +10,15 @@
 		"nodejs_compat"
 	],
 	"vars": {
-		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
-		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
-		// The worker now fails closed outside local development if Access is not configured.
-		"DOMAINS": "example.com",
+		"DOMAINS": "bbyb.dev",
 		"EMAIL_ADDRESSES": []
 	},
+	"routes": [
+		{
+			"pattern": "mail.bbyb.dev/*",
+			"zone_name": "bbyb.dev"
+		}
+	],
 	"send_email": [
 		{
 			"name": "EMAIL",
@@ -25,8 +28,8 @@
 	"r2_buckets": [
 		{
 			"binding": "BUCKET",
-			"bucket_name": "agentic-inbox",
-			"preview_bucket_name": "agentic-inbox"
+			"bucket_name": "b3-mail",
+			"preview_bucket_name": "b3-mail"
 		}
 	],
 	"ai": {
