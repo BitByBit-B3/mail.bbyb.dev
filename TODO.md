@@ -86,6 +86,14 @@ Visit `https://mail.bbyb.dev` after Access is set up, sign in with `bitbybit0123
 
 ---
 
+---
+
+## Future Features
+
+- **Reply to original sender from a forwarded email** — when opening a forwarded email (Fwd: prefix), offer a "Reply to Original" button that parses the forwarded-message block, extracts the original From/Subject, and pre-fills compose with the original sender as To and strips the forwarded body wrapper. Relevant code: `workers/routes/reply-forward.ts → handleForwardEmail`.
+
+---
+
 ## Quick Reference
 
 ```bash

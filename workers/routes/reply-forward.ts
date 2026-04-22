@@ -112,6 +112,11 @@ export async function handleReplyEmail(c: AppContext) {
 	return c.json({ id: messageId, status: "sent" }, 202);
 }
 
+// TODO: "Reply to original sender from forward" — when replying to a forwarded email,
+// detect that the email is a forward (Fwd: prefix or forwarded-message div) and offer
+// to reply to the original sender instead of the person who forwarded it to you.
+// Would need: parse the forwarded-message block to extract original From/Subject,
+// then pre-fill the compose form with original sender as To and strip the Fwd body.
 export async function handleForwardEmail(c: AppContext) {
 	const mailboxId = c.req.param("mailboxId") ?? "";
 	const id = c.req.param("id") ?? "";
