@@ -232,3 +232,52 @@ export async function generateEmailDraft(
 
 	return response;
 }
+
+// ── Email Tag Classifier ───────────────────────────────────────────
+
+const CLASSIFIER_PROMPT = `You are an email classifier. Given an email and a list of categories, return a JSON array of category IDs that apply to this email. Return ONLY the JSON array, nothing else.`;
+
+export async function classifyEmailTags(
+	ai: Ai,
+	email: { subject: string; sender: string; bodyText: string },
+	folders: Array<{ id: string; name: string; filter_prompt: string }>,
+): Promise<string[]> {
+	if (folders.length === 0) return [];
+
+	const categoriesText = folders
+		.map((f) => `{id: "${f.id}", name: "${f.name}", filter: "${f.filter_prompt}"}`)
+		.join("\n");
+
+	const userMessage =
+		`Email:\n` +
+		`- From: ${email.sender}\n` +
+		`- Subject: ${email.subject}\n` +
+		`- Body (first 500 chars): ${email.bodyText.slice(0, 500)}\n\n` +
+		`Categories:\n${categoriesText}\n\n` +
+		`Respond with ONLY a JSON array of matching IDs, e.g. ["folder-id"] or [].`;
+
+	try {
+		const response = (await ai.run(
+			// @ts-expect-error — model string not in generated union
+			"@cf/meta/llama-3.1-8b-instruct-fast",
+			{
+				messages: [
+					{ role: "system", content: CLASSIFIER_PROMPT },
+					{ role: "user", content: userMessage },
+				],
+				max_tokens: 200,
+				temperature: 0,
+			},
+		)) as { response?: string };
+
+		const raw = (response?.response || "[]").trim();
+		const match = raw.match(/\[[\s\S]*\]/);
+		if (!match) return [];
+		const parsed = JSON.parse(match[0]);
+		if (!Array.isArray(parsed)) return [];
+		const validIds = new Set(folders.map((f) => f.id));
+		return parsed.filter((id): id is string => typeof id === "string" && validIds.has(id));
+	} catch {
+		return [];
+	}
+}
