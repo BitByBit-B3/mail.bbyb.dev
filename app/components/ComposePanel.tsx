@@ -3,11 +3,18 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Banner, Button, Input } from "@cloudflare/kumo";
-import { ArrowCounterClockwiseIcon, FloppyDiskIcon, PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react";
+import {
+	ArrowCounterClockwiseIcon,
+	CaretDownIcon,
+	FloppyDiskIcon,
+	PaperPlaneTiltIcon,
+	XIcon,
+} from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { Editor } from "@tiptap/react";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import RecipientInput from "./RecipientInput";
 import RichTextEditor from "./RichTextEditor";
 
 export default function ComposePanel() {
@@ -49,7 +56,8 @@ export default function ComposePanel() {
 		if (!mailboxId || isGenerating) return;
 
 		const currentBody = editorRef.current?.getHTML() ?? body;
-		const hasExistingBody = currentBody && currentBody.trim() !== "" && currentBody !== "<p></p>";
+		const hasExistingBody =
+			currentBody && currentBody.trim() !== "" && currentBody !== "<p></p>";
 
 		setIsGenerating(true);
 		setShowPrompt(false);
@@ -72,7 +80,6 @@ export default function ComposePanel() {
 			const decoder = new TextDecoder();
 			let accumulated = "";
 
-			// Clear editor and start streaming
 			if (editorRef.current && !editorRef.current.isDestroyed) {
 				editorRef.current.commands.setContent("");
 			}
@@ -89,7 +96,6 @@ export default function ComposePanel() {
 				}
 			}
 
-			// Sync final content to React state
 			setBody(editorRef.current?.getHTML() ?? accumulated);
 			setLastGenerated(true);
 		} catch {
@@ -102,7 +108,8 @@ export default function ComposePanel() {
 
 	function handleAICompose() {
 		const currentBody = editorRef.current?.getHTML() ?? body;
-		const hasBody = currentBody && currentBody.trim() !== "" && currentBody !== "<p></p>";
+		const hasBody =
+			currentBody && currentBody.trim() !== "" && currentBody !== "<p></p>";
 		if (hasBody) {
 			setShowPrompt(true);
 		} else {
@@ -112,109 +119,90 @@ export default function ComposePanel() {
 
 	return (
 		<div className="flex flex-col h-full bg-kumo-base">
-			<div className="flex items-center justify-between px-4 py-3 border-b border-kumo-line shrink-0 md:px-6">
-				<h2 className="text-base font-semibold text-kumo-default">
+			{/* Header */}
+			<div className="flex items-center justify-between px-5 py-3 border-b border-kumo-line shrink-0">
+				<h2 className="text-sm font-semibold text-kumo-default tracking-tight">
 					{formTitle}
 				</h2>
-				<div className="flex items-center gap-1">
-					<Button
-						variant="ghost"
-						shape="square"
-						size="sm"
-						icon={<XIcon size={18} />}
-						onClick={closeCompose}
-						disabled={isSending}
-						aria-label="Close compose"
-					/>
-				</div>
+				<Button
+					variant="ghost"
+					shape="square"
+					size="sm"
+					icon={<XIcon size={16} />}
+					onClick={closeCompose}
+					disabled={isSending}
+					aria-label="Close compose"
+				/>
 			</div>
 
 			<form
 				onSubmit={(e) => handleSend(e, closePanel)}
-				className="flex flex-col flex-1 min-h-0 overflow-y-auto"
+				className="flex flex-col flex-1 min-h-0"
 			>
-				<div className="p-4 md:p-6 space-y-4">
-					{error && <Banner variant="error">{error}</Banner>}
-
-					<div className="space-y-3">
-						<div className="flex items-center gap-2">
-							<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-								To
-							</label>
-							<div className="flex-1 flex items-center gap-2 min-w-0">
-								<Input
-									type="text"
-									placeholder="recipient@example.com"
-									size="sm"
-									value={to}
-									onChange={(e) => setTo(e.target.value)}
-									required
-								/>
-								{!showCcBcc && (
-									<button
-										type="button"
-										onClick={() => setShowCcBcc(true)}
-										className="shrink-0 text-xs text-kumo-link hover:text-kumo-link-hover font-medium"
-									>
-										CC / BCC
-									</button>
-								)}
-							</div>
+				{/* Recipient fields */}
+				<div className="px-5 pt-2 pb-0 shrink-0">
+					{error && (
+						<div className="mb-2">
+							<Banner variant="error">{error}</Banner>
 						</div>
+					)}
 
-						{showCcBcc && (
-							<div className="flex items-center gap-2">
-								<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-									CC
-								</label>
-								<div className="flex-1">
-									<Input
-										type="text"
-										size="sm"
-										value={cc}
-										onChange={(e) => setCc(e.target.value)}
-										placeholder="Separate multiple addresses with commas"
-									/>
-								</div>
-							</div>
-						)}
+					<RecipientInput
+						label="To"
+						value={to}
+						onChange={setTo}
+						placeholder="Add recipients…"
+						required
+						autoFocus={!to}
+					/>
 
-						{showCcBcc && (
-							<div className="flex items-center gap-2">
-								<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-									BCC
-								</label>
-								<div className="flex-1">
-									<Input
-										type="text"
-										size="sm"
-										value={bcc}
-										onChange={(e) => setBcc(e.target.value)}
-										placeholder="Separate multiple addresses with commas"
-									/>
-								</div>
-							</div>
-						)}
-
-						<div className="flex items-center gap-2">
-							<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-								Subject
-							</label>
-							<div className="flex-1">
-								<Input
-									type="text"
-									placeholder="Email subject"
-									size="sm"
-									value={subject}
-									onChange={(e) => setSubject(e.target.value)}
-									required
-								/>
-							</div>
+					{showCcBcc ? (
+						<>
+							<RecipientInput
+								label="Cc"
+								value={cc}
+								onChange={setCc}
+								placeholder="Add recipients…"
+							/>
+							<RecipientInput
+								label="Bcc"
+								value={bcc}
+								onChange={setBcc}
+								placeholder="Add recipients…"
+							/>
+						</>
+					) : (
+						<div className="flex justify-end pb-1">
+							<button
+								type="button"
+								onClick={() => setShowCcBcc(true)}
+								className="text-xs text-kumo-subtle hover:text-kumo-default font-medium flex items-center gap-1 bg-transparent border-0 cursor-pointer py-1"
+							>
+								<CaretDownIcon size={11} />
+								Cc / Bcc
+							</button>
 						</div>
+					)}
+
+					{/* Subject */}
+					<div className="flex items-center gap-3 py-2 border-b border-kumo-line">
+						<span className="text-xs font-semibold text-kumo-subtle uppercase tracking-wide w-12 shrink-0">
+							Subject
+						</span>
+						<input
+							type="text"
+							placeholder="Email subject"
+							value={subject}
+							onChange={(e) => setSubject(e.target.value)}
+							required
+							className="flex-1 bg-transparent border-0 outline-none text-sm text-kumo-default placeholder:text-kumo-subtle py-0.5"
+						/>
 					</div>
+				</div>
 
-					{/* AI prompt bar (refine mode) */}
-					{showPrompt && (
+				{/* AI prompt bar (refine mode) */}
+				{showPrompt && (
+					<div className="px-5 pt-3 shrink-0">
 						<div className="flex items-center gap-2 px-3 py-2 bg-kumo-recessed rounded-lg border border-kumo-line">
 							<Input
 								type="text"
@@ -223,8 +211,14 @@ export default function ComposePanel() {
 								value={aiPrompt}
 								onChange={(e) => setAiPrompt(e.target.value)}
 								onKeyDown={(e) => {
-									if (e.key === "Enter") { e.preventDefault(); streamAIDraft(aiPrompt); }
-									if (e.key === "Escape") { setShowPrompt(false); setAiPrompt(""); }
+									if (e.key === "Enter") {
+										e.preventDefault();
+										streamAIDraft(aiPrompt);
+									}
+									if (e.key === "Escape") {
+										setShowPrompt(false);
+										setAiPrompt("");
+									}
 								}}
 								autoFocus
 							/>
@@ -243,36 +237,48 @@ export default function ComposePanel() {
 								shape="square"
 								size="sm"
 								icon={<XIcon size={14} />}
-								onClick={() => { setShowPrompt(false); setAiPrompt(""); }}
+								onClick={() => {
+									setShowPrompt(false);
+									setAiPrompt("");
+								}}
 								aria-label="Cancel"
 							/>
 						</div>
-					)}
+					</div>
+				)}
 
-					{/* Regenerate bar shown after a successful generation */}
-					{lastGenerated && !showPrompt && !isGenerating && (
-						<div className="flex items-center gap-2 text-sm text-kumo-subtle">
-							<ArrowCounterClockwiseIcon size={14} />
-							<span>AI draft generated.</span>
-							<button
-								type="button"
-								className="text-kumo-link hover:text-kumo-link-hover"
-								onClick={() => { setLastGenerated(false); setShowPrompt(true); }}
-							>
-								Refine
-							</button>
-							<span>or</span>
-							<button
-								type="button"
-								className="text-kumo-link hover:text-kumo-link-hover"
-								onClick={() => { setLastGenerated(false); streamAIDraft(); }}
-							>
-								Regenerate
-							</button>
-						</div>
-					)}
+				{/* Regenerate bar */}
+				{lastGenerated && !showPrompt && !isGenerating && (
+					<div className="px-5 pt-3 shrink-0 flex items-center gap-2 text-sm text-kumo-subtle">
+						<ArrowCounterClockwiseIcon size={13} />
+						<span>AI draft generated.</span>
+						<button
+							type="button"
+							className="text-kumo-link hover:text-kumo-link-hover bg-transparent border-0 cursor-pointer p-0"
+							onClick={() => {
+								setLastGenerated(false);
+								setShowPrompt(true);
+							}}
+						>
+							Refine
+						</button>
+						<span>or</span>
+						<button
+							type="button"
+							className="text-kumo-link hover:text-kumo-link-hover bg-transparent border-0 cursor-pointer p-0"
+							onClick={() => {
+								setLastGenerated(false);
+								streamAIDraft();
+							}}
+						>
+							Regenerate
+						</button>
+					</div>
+				)}
 
-					<div className="border border-kumo-line rounded-md overflow-hidden bg-kumo-base">
+				{/* Editor */}
+				<div className="flex-1 min-h-0 overflow-y-auto px-5 pt-3 pb-0">
+					<div className="border border-kumo-line rounded-md overflow-hidden bg-kumo-base h-full min-h-[180px]">
 						<RichTextEditor
 							value={body}
 							onChange={setBody}
@@ -283,10 +289,16 @@ export default function ComposePanel() {
 					</div>
 				</div>
 
-				{/* Footer actions */}
-				<div className="mt-auto px-4 py-3 border-t border-kumo-line bg-kumo-fill/30 shrink-0 md:px-6">
+				{/* Footer */}
+				<div className="px-5 py-3 border-t border-kumo-line shrink-0 mt-3">
 					<div className="flex items-center justify-between">
-						<Button type="button" variant="ghost" size="sm" onClick={closeCompose} disabled={isSending}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={closeCompose}
+							disabled={isSending}
+						>
 							Discard
 						</Button>
 						<div className="flex items-center gap-2">
@@ -299,7 +311,7 @@ export default function ComposePanel() {
 								icon={<FloppyDiskIcon size={14} />}
 								onClick={handleSaveDraft}
 							>
-								{isSavingDraft ? "Saving..." : "Save as Draft"}
+								{isSavingDraft ? "Saving…" : "Save Draft"}
 							</Button>
 							<Button
 								type="submit"
@@ -309,7 +321,7 @@ export default function ComposePanel() {
 								disabled={isSavingDraft || isSending}
 								icon={<PaperPlaneTiltIcon size={14} />}
 							>
-								{isSending ? "Sending..." : "Send"}
+								{isSending ? "Sending…" : "Send"}
 							</Button>
 						</div>
 					</div>
