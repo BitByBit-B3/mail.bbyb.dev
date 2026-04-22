@@ -3,8 +3,9 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Loader } from "@cloudflare/kumo";
-import { PlugsIcon, RobotIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, PlugsIcon, RobotIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { useUIStore } from "~/hooks/useUIStore";
 import MCPPanel from "./MCPPanel";
 
 function LazyAgentPanel() {
@@ -42,6 +43,7 @@ function LazyAgentPanel() {
 
 export default function AgentSidebar() {
 	const [activeTab, setActiveTab] = useState<"agent" | "mcp">("agent");
+	const toggleAgentPanel = useUIStore((s) => s.toggleAgentPanel);
 
 	return (
 		<div className="flex flex-col h-full">
@@ -70,6 +72,14 @@ export default function AgentSidebar() {
 				>
 					<PlugsIcon size={14} weight={activeTab === "mcp" ? "fill" : "regular"} />
 					MCP
+				</button>
+				<button
+					type="button"
+					onClick={toggleAgentPanel}
+					className="ml-auto mr-2 p-1.5 rounded-md text-kumo-subtle hover:text-kumo-default hover:bg-kumo-fill transition-colors bg-transparent border-0 cursor-pointer"
+					aria-label="Collapse panel"
+				>
+					<CaretRightIcon size={14} weight="bold" />
 				</button>
 			</div>
 
