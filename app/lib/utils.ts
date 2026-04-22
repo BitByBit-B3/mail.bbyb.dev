@@ -197,7 +197,9 @@ export function rewriteInlineImages(
 	let result = body;
 	for (const att of attachments) {
 		if (att.disposition === "inline" && att.content_id) {
-			const url = `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${att.id}`;
+			const url = getAttachmentUrl(mailboxId, emailId, att.id, {
+				disposition: "inline",
+			});
 			// Strip angle brackets from content_id if present
 			const cid = att.content_id.startsWith("<")
 				? att.content_id.slice(1, -1)
@@ -216,16 +218,20 @@ export function getAttachmentUrl(
 	mailboxId: string,
 	emailId: string,
 	attachmentId: string,
+	options?: { disposition?: "inline" | "attachment" },
 ): string {
-	return `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${attachmentId}`;
+	const params = new URLSearchParams();
+	if (options?.disposition) {
+		params.set("disposition", options.disposition);
+	}
+	const query = params.size > 0 ? `?${params.toString()}` : "";
+	return `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${attachmentId}${query}`;
 }
 
 export function downloadFile(url: string, filename: string) {
 	const link = document.createElement("a");
 	link.href = url;
 	link.download = filename;
-	link.target = "_blank";
-	link.rel = "noopener noreferrer";
 	document.body.appendChild(link);
 	link.click();
 	document.body.removeChild(link);

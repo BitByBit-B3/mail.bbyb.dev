@@ -34,7 +34,11 @@ interface ThreadMessageProps {
 	onEditDraft?: () => void;
 	onDeleteDraft?: () => void;
 	onViewSource?: () => void;
-	onPreviewImage?: (url: string, filename: string) => void;
+	onPreviewImage?: (
+		previewUrl: string,
+		filename: string,
+		downloadUrl: string,
+	) => void;
 }
 
 function Avatar({ isDraft, isSelf, sender }: { isDraft?: boolean; isSelf: boolean; sender: string }) {

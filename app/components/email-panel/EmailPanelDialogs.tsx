@@ -9,6 +9,7 @@ import type { Email } from "~/types";
 interface PreviewImage {
 	url: string;
 	filename: string;
+	downloadUrl: string;
 }
 
 interface EmailPanelDialogsProps {
@@ -139,7 +140,10 @@ export default function EmailPanelDialogs({
 							size="sm"
 							onClick={() => {
 								if (previewImage) {
-									downloadFile(previewImage.url, previewImage.filename);
+									downloadFile(
+										previewImage.downloadUrl,
+										previewImage.filename,
+									);
 								}
 							}}
 						>

@@ -10,7 +10,11 @@ import type { Email } from "~/types";
 interface SingleMessageViewProps {
 	email: Email;
 	mailboxId?: string;
-	onPreviewImage: (url: string, filename: string) => void;
+	onPreviewImage: (
+		previewUrl: string,
+		filename: string,
+		downloadUrl: string,
+	) => void;
 }
 
 export default function SingleMessageView({

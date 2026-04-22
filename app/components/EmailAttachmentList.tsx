@@ -10,7 +10,11 @@ interface EmailAttachmentListProps {
 	mailboxId?: string;
 	emailId: string;
 	attachments?: Attachment[];
-	onPreviewImage?: (url: string, filename: string) => void;
+	onPreviewImage?: (
+		previewUrl: string,
+		filename: string,
+		downloadUrl: string,
+	) => void;
 	className?: string;
 	showHeading?: boolean;
 }
@@ -40,7 +44,18 @@ export default function EmailAttachmentList({
 			)}
 			<div className="flex flex-wrap gap-2">
 				{files.map((attachment) => {
-					const url = getAttachmentUrl(mailboxId, emailId, attachment.id);
+					const downloadUrl = getAttachmentUrl(
+						mailboxId,
+						emailId,
+						attachment.id,
+						{ disposition: "attachment" },
+					);
+					const previewUrl = getAttachmentUrl(
+						mailboxId,
+						emailId,
+						attachment.id,
+						{ disposition: "inline" },
+					);
 					const isImage = attachment.mimetype?.startsWith("image/");
 
 					if (isImage && onPreviewImage) {
@@ -48,7 +63,13 @@ export default function EmailAttachmentList({
 							<button
 								key={attachment.id}
 								type="button"
-								onClick={() => onPreviewImage(url, attachment.filename)}
+								onClick={() =>
+									onPreviewImage(
+										previewUrl,
+										attachment.filename,
+										downloadUrl,
+									)
+								}
 								className="flex items-center gap-2 rounded-md border border-kumo-line px-3 py-2 transition-colors hover:bg-kumo-tint text-sm text-left"
 							>
 								<ImageIcon size={16} className="text-kumo-subtle shrink-0" />
@@ -63,7 +84,7 @@ export default function EmailAttachmentList({
 					return (
 						<a
 							key={attachment.id}
-							href={url}
+							href={downloadUrl}
 							target="_blank"
 							rel="noopener noreferrer"
 							className="flex items-center gap-2 rounded-md border border-kumo-line px-3 py-2 no-underline transition-colors hover:bg-kumo-tint text-sm"

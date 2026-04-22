@@ -50,7 +50,11 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const [isSending, setIsSending] = useState(false);
 	const [sourceViewEmail, setSourceViewEmail] = useState<Email | null>(null);
 	const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
-	const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
+	const [previewImage, setPreviewImage] = useState<{
+		url: string;
+		filename: string;
+		downloadUrl: string;
+	} | null>(null);
 	const isDraftFolder = folder === Folders.DRAFT;
 
 	const threadReplies = useMemo(() => {
@@ -204,8 +208,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								onEditDraft={isDraft ? () => handleEditDraft(msg) : undefined}
 								onDeleteDraft={isDraft ? () => handleDeleteDraft(msg) : undefined}
 								onViewSource={() => setSourceViewEmail(msg)}
-								onPreviewImage={(url, filename) =>
-									setPreviewImage({ url, filename })
+								onPreviewImage={(url, filename, downloadUrl) =>
+									setPreviewImage({ url, filename, downloadUrl })
 								}
 							/>
 						);
@@ -214,8 +218,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					<SingleMessageView
 						email={email}
 						mailboxId={mailboxId}
-						onPreviewImage={(url, filename) =>
-							setPreviewImage({ url, filename })
+						onPreviewImage={(url, filename, downloadUrl) =>
+							setPreviewImage({ url, filename, downloadUrl })
 						}
 					/>
 				)}

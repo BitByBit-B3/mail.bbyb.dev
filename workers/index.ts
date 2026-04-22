@@ -464,9 +464,16 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
 	if (!obj) return c.json({ error: "Attachment file not found" }, 404);
 	const headers = new Headers();
-	headers.set("Content-Type", attachment.mimetype);
+	const disposition = c.req.query("disposition") === "inline" ? "inline" : "attachment";
+	headers.set(
+		"Content-Type",
+		obj.httpMetadata?.contentType || attachment.mimetype || "application/octet-stream",
+	);
 	const sanitized = attachment.filename.replace(/[\x00-\x1f"\\]/g, "_");
-	headers.set("Content-Disposition", `attachment; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`);
+	headers.set(
+		"Content-Disposition",
+		`${disposition}; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
+	);
 	return new Response(obj.body, { headers });
 });
 
