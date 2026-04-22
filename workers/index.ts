@@ -14,6 +14,7 @@ import {
 	generateMessageId,
 	buildThreadingHeaders,
 	listMailboxes,
+	stripHtmlToText,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
@@ -375,16 +376,23 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
 app.get("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => c.json(await c.var.mailboxStub.getFolders()));
 
 app.post("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => {
-	const { name } = (await c.req.json()) as { name: string };
+	const body = (await c.req.json()) as { name: string; filter_prompt?: string };
+	const { name, filter_prompt } = body;
 	const slug = slugify(name);
 	if (!slug) return c.json({ error: "Folder name must contain alphanumeric characters" }, 400);
-	const f = await c.var.mailboxStub.createFolder(slug, name);
+	const prompt = typeof filter_prompt === "string" && filter_prompt.trim() ? filter_prompt.trim() : null;
+	const f = await (c.var.mailboxStub as any).createFolder(slug, name, 1, prompt);
 	return f ? c.json(f, 201) : c.json({ error: "Folder with this name already exists" }, 409);
 });
 
 app.put("/api/v1/mailboxes/:mailboxId/folders/:id", async (c: AppContext) => {
-	const { name } = (await c.req.json()) as { name: string };
-	const f = await c.var.mailboxStub.updateFolder(c.req.param("id")!, name);
+	const body = (await c.req.json()) as { name?: string; filter_prompt?: string };
+	const { name, filter_prompt } = body;
+	if (!name) return c.json({ error: "name is required" }, 400);
+	const prompt = filter_prompt !== undefined
+		? (typeof filter_prompt === "string" && filter_prompt.trim() ? filter_prompt.trim() : null)
+		: undefined;
+	const f = await (c.var.mailboxStub as any).updateFolder(c.req.param("id")!, name, prompt);
 	return f ? c.json(f) : c.json({ error: "Folder not found" }, 404);
 });
 
@@ -500,6 +508,28 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 	}, attachmentData);
+
+	// AI tag classification — non-blocking, never delays delivery
+	ctx.waitUntil(
+		(async () => {
+			try {
+				const foldersWithPrompts = await (stub as any).getFoldersWithPrompts() as Array<{ id: string; name: string; filter_prompt: string }>;
+				if (foldersWithPrompts.length === 0) return;
+				const { classifyEmailTags } = await import("./lib/ai");
+				const bodyText = stripHtmlToText(parsedEmail.html || parsedEmail.text || "");
+				const tags = await classifyEmailTags(env.AI, {
+					subject: parsedEmail.subject || "",
+					sender: (parsedEmail.from?.address || "").toLowerCase(),
+					bodyText,
+				}, foldersWithPrompts);
+				if (tags.length > 0) {
+					await (stub as any).setEmailTags(messageId, tags);
+				}
+			} catch (e) {
+				console.error("AI tag classification failed:", (e as Error).message);
+			}
+		})(),
+	);
 
 	// Forward if enabled
 	const mailboxSettingsObj = await env.BUCKET.get(`mailboxes/${mailboxId}.json`);
