@@ -2,6 +2,9 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import type { SignatureFields } from "../../shared/signature";
+export type { SignatureFields };
+
 export interface SignatureSettings {
 	enabled: boolean;
 	text: string;
@@ -14,6 +17,9 @@ export interface MailboxSettings {
 	signature?: SignatureSettings;
 	autoReply?: { enabled: boolean; subject: string; message: string };
 	agentSystemPrompt?: string;
+	avatarUrl?: string;
+	signatureFields?: SignatureFields;
+	signatureEnabled?: boolean;
 }
 
 export interface Mailbox {
