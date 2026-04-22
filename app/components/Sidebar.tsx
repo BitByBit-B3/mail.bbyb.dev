@@ -5,36 +5,35 @@
 import { Badge, Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
+	CaretDoubleLeftIcon,
 	CaretLeftIcon,
 	FileIcon,
 	FolderIcon,
+	GearSixIcon,
+	MagnifyingGlassIcon,
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
 	PlusIcon,
-	TrashIcon,
 	TrayIcon,
+	TrashIcon,
+	XIcon,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
 import { useCreateFolder, useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 
-const FOLDER_ICONS: Record<string, React.ReactNode> = {
-	[Folders.INBOX]: <TrayIcon size={18} weight="regular" />,
-	[Folders.SENT]: <PaperPlaneTiltIcon size={18} weight="regular" />,
-	[Folders.DRAFT]: <FileIcon size={18} weight="regular" />,
-	[Folders.ARCHIVE]: <ArchiveIcon size={18} weight="regular" />,
-	[Folders.TRASH]: <TrashIcon size={18} weight="regular" />,
-};
+const VIEWS_FOLDER_LINKS = [
+	{ id: Folders.INBOX, label: "Inbox", icon: <TrayIcon size={16} weight="regular" /> },
+];
 
-const SYSTEM_FOLDER_LINKS = [
-	{ id: Folders.INBOX, label: "Inbox" },
-	{ id: Folders.SENT, label: "Sent" },
-	{ id: Folders.DRAFT, label: "Drafts" },
-	{ id: Folders.ARCHIVE, label: "Archive" },
-	{ id: Folders.TRASH, label: "Trash" },
+const MAIL_FOLDER_LINKS = [
+	{ id: Folders.SENT, label: "Sent", icon: <PaperPlaneTiltIcon size={16} weight="regular" /> },
+	{ id: Folders.DRAFT, label: "Drafts", icon: <FileIcon size={16} weight="regular" /> },
+	{ id: Folders.ARCHIVE, label: "Archive", icon: <ArchiveIcon size={16} weight="regular" /> },
+	{ id: Folders.TRASH, label: "Trash", icon: <TrashIcon size={16} weight="regular" /> },
 ];
 
 interface FolderLinkProps {
@@ -45,26 +44,20 @@ interface FolderLinkProps {
 	onClick?: () => void;
 }
 
-function FolderLink({
-	to,
-	icon,
-	label,
-	unreadCount,
-	onClick,
-}: FolderLinkProps) {
+function FolderLink({ to, icon, label, unreadCount, onClick }: FolderLinkProps) {
 	return (
 		<NavLink
 			to={to}
 			onClick={onClick}
 			className={({ isActive }) =>
-				`flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors ${
+				`flex items-center gap-2.5 py-1.5 px-2.5 rounded-md text-[13px] transition-colors ${
 					isActive
-						? "bg-kumo-fill font-semibold text-kumo-default"
+						? "bg-kumo-fill font-medium text-kumo-default"
 						: "text-kumo-strong hover:bg-kumo-tint"
 				}`
 			}
 		>
-			<span className="shrink-0">{icon}</span>
+			<span className="shrink-0 text-kumo-subtle">{icon}</span>
 			<span className="truncate flex-1">{label}</span>
 			{unreadCount != null && unreadCount > 0 && (
 				<Badge variant="secondary">{unreadCount}</Badge>
@@ -73,19 +66,54 @@ function FolderLink({
 	);
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+	return (
+		<div className="px-2.5 pt-4 pb-1">
+			<span className="text-[10px] font-semibold text-kumo-subtle uppercase tracking-wider">
+				{children}
+			</span>
+		</div>
+	);
+}
+
 export default function Sidebar() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
 	const navigate = useNavigate();
+	const location = useLocation();
+	const [searchParams] = useSearchParams();
 	const { data: folders = [] } = useFolders(mailboxId);
 	const createFolderMutation = useCreateFolder();
-	const { startCompose, closeSidebar } = useUIStore();
+	const { startCompose, closeSidebar, toggleSidebarCollapsed } = useUIStore();
 	const { data: currentMailbox } = useMailbox(mailboxId);
 	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 	const [newFolderName, setNewFolderName] = useState("");
+	const [searchQuery, setSearchQuery] = useState("");
+
+	const urlQuery = searchParams.get("q") || "";
+	useEffect(() => {
+		if (location.pathname.includes("/search") && urlQuery) {
+			setSearchQuery(urlQuery);
+		} else if (!location.pathname.includes("/search")) {
+			setSearchQuery("");
+		}
+	}, [urlQuery, location.pathname]);
+
+	const performSearch = () => {
+		if (mailboxId && searchQuery.trim()) {
+			navigate(`/mailbox/${mailboxId}/search?q=${encodeURIComponent(searchQuery.trim())}`);
+			closeSidebar();
+		}
+	};
+
+	const clearSearch = () => {
+		setSearchQuery("");
+		if (location.pathname.includes("/search") && mailboxId) {
+			navigate(`/mailbox/${mailboxId}/emails/inbox`);
+		}
+	};
 
 	const customFolders = useMemo(
-		() =>
-			folders.filter((f) => !(SYSTEM_FOLDER_IDS as readonly string[]).includes(f.id)),
+		() => folders.filter((f) => !(SYSTEM_FOLDER_IDS as readonly string[]).includes(f.id)),
 		[folders],
 	);
 
@@ -105,142 +133,163 @@ export default function Sidebar() {
 
 	const displayName = useMemo(() => {
 		if (!currentMailbox) return mailboxId?.split("@")[0] || "Mailbox";
-		// Prefer settings.fromName > name > local part of email
-		if (currentMailbox.settings?.fromName) {
-			return currentMailbox.settings.fromName;
-		}
-		if (currentMailbox.name && currentMailbox.name !== currentMailbox.email) {
-			return currentMailbox.name;
-		}
+		if (currentMailbox.settings?.fromName) return currentMailbox.settings.fromName;
+		if (currentMailbox.name && currentMailbox.name !== currentMailbox.email) return currentMailbox.name;
 		return currentMailbox.email.split("@")[0] || currentMailbox.name;
 	}, [currentMailbox, mailboxId]);
 
-	const handleNavClick = () => {
-		// Close mobile sidebar on navigation
-		closeSidebar();
-	};
+	const handleNavClick = () => closeSidebar();
 
 	return (
-		<aside className="h-full w-64 bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line">
-			{/* Back + identity */}
-			<div className="px-4 pt-4 pb-1">
-				<button
-					type="button"
-					onClick={() => {
-						navigate("/");
-						closeSidebar();
-					}}
-					className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
-				>
-					<CaretLeftIcon size={14} />
-					<span>Mailboxes</span>
-				</button>
-				<div className="flex items-center gap-3 px-1">
-					{currentMailbox?.settings?.avatarUrl ? (
-						<img
-							src={currentMailbox.settings.avatarUrl}
-							alt={displayName}
-							className="h-9 w-9 rounded-full object-cover shrink-0"
-						/>
-					) : (
-						<div className="h-9 w-9 rounded-full bg-kumo-fill flex items-center justify-center text-sm font-semibold text-kumo-default shrink-0">
-							{displayName.charAt(0).toUpperCase()}
-						</div>
-					)}
-					<div className="min-w-0">
-						<div className="text-base font-semibold text-kumo-default truncate">
-							{displayName}
-						</div>
-						<div className="text-sm text-kumo-subtle truncate mt-0.5">
-							{currentMailbox?.email || mailboxId}
-						</div>
+		<aside className="h-full w-[240px] bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line">
+			{/* Identity block */}
+			<div className="flex items-center gap-2 px-3 pt-3 pb-2 shrink-0">
+				{currentMailbox?.settings?.avatarUrl ? (
+					<img
+						src={currentMailbox.settings.avatarUrl}
+						alt={displayName}
+						className="h-8 w-8 rounded-full object-cover shrink-0"
+					/>
+				) : (
+					<div className="h-8 w-8 rounded-full bg-kumo-fill flex items-center justify-center text-sm font-semibold text-kumo-default shrink-0">
+						{displayName.charAt(0).toUpperCase()}
 					</div>
+				)}
+				<div className="flex-1 min-w-0">
+					<div className="text-[13px] font-semibold text-kumo-default truncate leading-tight">
+						{displayName}
+					</div>
+					<div className="text-[11px] text-kumo-subtle truncate leading-tight">
+						{currentMailbox?.email || mailboxId}
+					</div>
+				</div>
+				<Tooltip content="Collapse sidebar" side="bottom" asChild>
+					<Button
+						variant="ghost"
+						shape="square"
+						size="sm"
+						icon={<CaretDoubleLeftIcon size={14} />}
+						onClick={toggleSidebarCollapsed}
+						aria-label="Collapse sidebar"
+						className="hidden lg:inline-flex shrink-0"
+					/>
+				</Tooltip>
+				<Tooltip content="Compose" side="bottom" asChild>
+					<Button
+						variant="ghost"
+						shape="square"
+						size="sm"
+						icon={<PencilSimpleIcon size={14} />}
+						onClick={() => { startCompose(); closeSidebar(); }}
+						aria-label="Compose new email"
+						className="shrink-0"
+					/>
+				</Tooltip>
+			</div>
+
+			{/* Search */}
+			<div className="px-3 pb-2 shrink-0">
+				<div className="relative flex items-center">
+					<MagnifyingGlassIcon
+						size={14}
+						className="absolute left-2.5 text-kumo-subtle pointer-events-none"
+					/>
+					<input
+						type="text"
+						placeholder="Search"
+						value={searchQuery}
+						onChange={(e) => setSearchQuery(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") performSearch();
+							if (e.key === "Escape") clearSearch();
+						}}
+						className="w-full pl-8 pr-7 py-1.5 text-[13px] bg-kumo-fill border border-kumo-line rounded-md text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring"
+					/>
+					{searchQuery && (
+						<button
+							type="button"
+							onClick={clearSearch}
+							className="absolute right-2 text-kumo-subtle hover:text-kumo-default bg-transparent border-0 p-0 cursor-pointer"
+							aria-label="Clear search"
+						>
+							<XIcon size={12} />
+						</button>
+					)}
 				</div>
 			</div>
 
-			{/* Compose */}
-			<div className="px-3 py-3">
-				<Button
-					variant="primary"
-					icon={<PencilSimpleIcon size={16} />}
-					onClick={() => startCompose()}
-					className="w-full"
-				>
-					Compose
-				</Button>
-			</div>
-
 			{/* Navigation */}
-			<nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-				{SYSTEM_FOLDER_LINKS.map((folder) => (
+			<nav className="flex-1 overflow-y-auto px-2 pb-2">
+				<SectionLabel>Views</SectionLabel>
+				{VIEWS_FOLDER_LINKS.map((folder) => (
 					<FolderLink
 						key={folder.id}
 						to={`/mailbox/${mailboxId}/emails/${folder.id}`}
-						icon={FOLDER_ICONS[folder.id]}
+						icon={folder.icon}
 						label={folder.label}
 						unreadCount={getUnreadCount(folder.id)}
 						onClick={handleNavClick}
 					/>
 				))}
+				{customFolders.map((folder) => (
+					<FolderLink
+						key={folder.id}
+						to={`/mailbox/${mailboxId}/emails/${folder.id}`}
+						icon={<FolderIcon size={16} />}
+						label={folder.name}
+						unreadCount={folder.unreadCount}
+						onClick={handleNavClick}
+					/>
+				))}
+				<button
+					type="button"
+					onClick={() => setIsCreateFolderOpen(true)}
+					className="flex items-center gap-2.5 w-full py-1.5 px-2.5 rounded-md text-[13px] text-kumo-subtle hover:text-kumo-default hover:bg-kumo-tint transition-colors bg-transparent border-0 cursor-pointer mt-0.5"
+				>
+					<PlusIcon size={14} />
+					<span>Add view</span>
+				</button>
 
-				{/* Custom folders */}
-				{customFolders.length > 0 && (
-					<div className="pt-5">
-						<div className="flex items-center justify-between px-3 mb-1.5">
-							<span className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle">
-								Folders
-							</span>
-							<Tooltip content="New folder" asChild>
-								<Button
-									variant="ghost"
-									shape="square"
-									size="sm"
-									icon={<PlusIcon size={16} />}
-									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="Create new folder"
-								/>
-							</Tooltip>
-						</div>
-						{customFolders.map((folder) => (
-							<FolderLink
-								key={folder.id}
-								to={`/mailbox/${mailboxId}/emails/${folder.id}`}
-								icon={<FolderIcon size={18} />}
-								label={folder.name}
-								unreadCount={folder.unreadCount}
-								onClick={handleNavClick}
-							/>
-						))}
-					</div>
-				)}
-
-				{/* Add folder button when no custom folders */}
-				{customFolders.length === 0 && (
-					<div className="pt-5">
-						<div className="flex items-center justify-between px-3 mb-1.5">
-							<span className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle">
-								Folders
-							</span>
-							<Tooltip content="New folder" asChild>
-								<Button
-									variant="ghost"
-									shape="square"
-									size="sm"
-									icon={<PlusIcon size={16} />}
-									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="Create new folder"
-								/>
-							</Tooltip>
-						</div>
-					</div>
-				)}
+				<SectionLabel>Mail</SectionLabel>
+				{MAIL_FOLDER_LINKS.map((folder) => (
+					<FolderLink
+						key={folder.id}
+						to={`/mailbox/${mailboxId}/emails/${folder.id}`}
+						icon={folder.icon}
+						label={folder.label}
+						unreadCount={getUnreadCount(folder.id)}
+						onClick={handleNavClick}
+					/>
+				))}
 			</nav>
 
-			{/* Create folder dialog */}
-			<Dialog.Root
-				open={isCreateFolderOpen}
-				onOpenChange={setIsCreateFolderOpen}
-			>
+			{/* Bottom */}
+			<div className="px-2 py-2 border-t border-kumo-line shrink-0 space-y-0.5">
+				<NavLink
+					to={`/mailbox/${mailboxId}/settings`}
+					onClick={handleNavClick}
+					className={({ isActive }) =>
+						`flex items-center gap-2.5 py-1.5 px-2.5 rounded-md text-[13px] transition-colors ${
+							isActive
+								? "bg-kumo-fill font-medium text-kumo-default"
+								: "text-kumo-strong hover:bg-kumo-tint"
+						}`
+					}
+				>
+					<GearSixIcon size={16} className="text-kumo-subtle shrink-0" />
+					<span>Settings</span>
+				</NavLink>
+				<button
+					type="button"
+					onClick={() => { navigate("/"); closeSidebar(); }}
+					className="flex items-center gap-2.5 w-full py-1.5 px-2.5 rounded-md text-[13px] text-kumo-subtle hover:text-kumo-default hover:bg-kumo-tint transition-colors bg-transparent border-0 cursor-pointer"
+				>
+					<CaretLeftIcon size={14} className="shrink-0" />
+					<span>All mailboxes</span>
+				</button>
+			</div>
+
+			<Dialog.Root open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
 				<Dialog size="sm" className="p-6">
 					<Dialog.Title className="text-base font-semibold mb-4">
 						Create folder
@@ -256,16 +305,10 @@ export default function Sidebar() {
 						<div className="flex justify-end gap-2">
 							<Dialog.Close
 								render={(props) => (
-									<Button {...props} variant="secondary">
-										Cancel
-									</Button>
+									<Button {...props} variant="secondary">Cancel</Button>
 								)}
 							/>
-							<Button
-								type="submit"
-								variant="primary"
-								disabled={!newFolderName.trim()}
-							>
+							<Button type="submit" variant="primary" disabled={!newFolderName.trim()}>
 								Create
 							</Button>
 						</div>
