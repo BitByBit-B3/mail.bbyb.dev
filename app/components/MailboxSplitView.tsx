@@ -3,49 +3,44 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { ReactNode } from "react";
-import ComposePanel from "~/components/ComposePanel";
 import EmailPanel from "~/components/EmailPanel";
+import EmptyReadingPane from "~/components/EmptyReadingPane";
+import { useUIStore } from "~/hooks/useUIStore";
 
-interface MailboxSplitViewProps {
-	selectedEmailId: string | null;
-	isComposing: boolean;
-	children: ReactNode;
-}
-
-export default function MailboxSplitView({
-	selectedEmailId,
-	isComposing,
-	children,
-}: MailboxSplitViewProps) {
-	const isPanelOpen = selectedEmailId !== null || isComposing;
+export default function MailboxSplitView({ children }: { children: ReactNode }) {
+	const { selectedEmailId } = useUIStore();
 
 	return (
 		<div className="flex h-full">
+			{/* Email list column
+			    - Mobile: full-width when no email, hidden when reading
+			    - Tablet (md): 320px fixed when email open, full-width otherwise
+			    - Desktop (lg): 380px always visible */}
 			<div
-				className={`flex flex-col min-w-0 shrink-0 ${
-					isPanelOpen
-						? "hidden md:flex md:w-[380px] md:border-r md:border-kumo-line"
-						: "w-full"
+				className={`flex flex-col shrink-0 overflow-hidden ${
+					selectedEmailId
+						? "hidden md:flex md:w-[320px] md:border-r md:border-kumo-line lg:w-[380px]"
+						: "flex w-full lg:w-[380px] lg:border-r lg:border-kumo-line"
 				}`}
 			>
 				{children}
 			</div>
-			{isPanelOpen && (
-				<div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full md:w-auto">
-					{isComposing && !selectedEmailId ? (
-						<ComposePanel />
-					) : isComposing && selectedEmailId ? (
-						<div className="flex flex-col h-full overflow-y-auto">
-							<ComposePanel />
-							<div className="border-t border-kumo-line">
-								<EmailPanel emailId={selectedEmailId} />
-							</div>
-						</div>
-					) : selectedEmailId ? (
-						<EmailPanel emailId={selectedEmailId} />
-					) : null}
-				</div>
-			)}
+
+			{/* Reading pane
+			    - Mobile: full-screen when email selected, hidden otherwise
+			    - Tablet (md): flex-1 always visible (empty state hidden on mobile)
+			    - Desktop (lg): flex-1 with empty state placeholder */}
+			<div
+				className={`flex-1 flex flex-col min-w-0 overflow-hidden ${
+					selectedEmailId ? "flex" : "hidden lg:flex"
+				}`}
+			>
+				{selectedEmailId ? (
+					<EmailPanel emailId={selectedEmailId} />
+				) : (
+					<EmptyReadingPane />
+				)}
+			</div>
 		</div>
 	);
 }

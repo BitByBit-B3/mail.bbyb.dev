@@ -147,10 +147,12 @@ export default function EmailListRoute() {
 	}>();
 	const {
 		selectedEmailId,
-		isComposing,
 		selectEmail,
 		closePanel,
 		startCompose,
+		toggleSidebar,
+		isSidebarCollapsed,
+		toggleSidebarCollapsed,
 	} = useUIStore();
 	const [page, setPage] = useState(1);
 
@@ -184,7 +186,6 @@ export default function EmailListRoute() {
 		return folder ? folder.charAt(0).toUpperCase() + folder.slice(1) : "Inbox";
 	}, [folders, folder]);
 
-	const isPanelOpen = selectedEmailId !== null || isComposing;
 
 	// Track folder identity to detect folder changes vs page changes
 	const prevFolderRef = useRef<string | undefined>(undefined);
@@ -269,10 +270,7 @@ export default function EmailListRoute() {
 	};
 
 	return (
-		<MailboxSplitView
-			selectedEmailId={selectedEmailId}
-			isComposing={isComposing}
-		>
+		<MailboxSplitView>
 				{/* Folder header */}
 				<div className="flex items-center justify-between px-4 py-3.5 border-b border-kumo-line shrink-0 md:px-5">
 					<h1 className="text-lg font-semibold text-kumo-default">
@@ -328,9 +326,9 @@ export default function EmailListRoute() {
 												handleRowClick(email);
 											}
 										}}
-										className={`group flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 md:px-6 md:py-3 ${
-											isPanelOpen ? "md:px-4 md:py-2.5" : ""
-										} ${isSelected ? "bg-kumo-tint" : "hover:bg-kumo-tint"}`}
+										className={`group flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 ${
+											isSelected ? "bg-kumo-tint" : "hover:bg-kumo-tint"
+										}`}
 									>
 										{/* Unread dot */}
 										<div className="w-2.5 shrink-0 flex justify-center">
