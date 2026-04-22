@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1e293b"/>
-  <!-- envelope body -->
-  <rect x="5" y="9" width="22" height="14" rx="2" fill="#94a3b8"/>
-  <!-- envelope flap triangle -->
-  <polygon points="5,9 16,18 27,9" fill="#cbd5e1"/>
+  <!-- dark rounded background -->
+  <rect width="32" height="32" rx="6" fill="#0f172a"/>
+  <!-- blue accent bar left -->
+  <rect x="0" y="0" width="4" height="32" rx="2" fill="#3b82f6"/>
+  <!-- envelope body — white so it pops -->
+  <rect x="7" y="10" width="18" height="13" rx="2" fill="#ffffff"/>
+  <!-- envelope flap — blue to match accent -->
+  <polygon points="7,10 16,18 25,10" fill="#3b82f6"/>
 </svg>
