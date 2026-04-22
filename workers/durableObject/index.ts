@@ -69,6 +69,7 @@ interface GetEmailsOptions {
 	limit?: number;
 	sortColumn?: SortColumn;
 	sortDirection?: "ASC" | "DESC";
+	tag?: string;
 }
 
 interface EmailData {
@@ -115,6 +116,7 @@ export class MailboxDO extends DurableObject<Env> {
 		const {
 			folder,
 			thread_id,
+			tag,
 			page = 1,
 			limit: rawLimit = 25,
 			sortColumn: rawSortColumn = "date",
@@ -141,6 +143,11 @@ export class MailboxDO extends DurableObject<Env> {
 		if (thread_id) {
 			conditions.push(eq(schema.emails.thread_id, thread_id));
 		}
+		if (tag) {
+			conditions.push(
+				sql`EXISTS (SELECT 1 FROM json_each(${schema.emails.tags}) WHERE value = ${tag})`,
+			);
+		}
 
 		const orderCol = SORT_COLUMN_MAP[sortColumn];
 		const orderDir = sortDirection === "ASC" ? asc(orderCol) : desc(orderCol);
@@ -160,6 +167,7 @@ export class MailboxDO extends DurableObject<Env> {
 				email_references: schema.emails.email_references,
 				thread_id: schema.emails.thread_id,
 				folder_id: schema.emails.folder_id,
+				tags: schema.emails.tags,
 				snippet: sql<string>`SUBSTR(${schema.emails.body}, 1, 300)`,
 			})
 			.from(schema.emails)
@@ -173,6 +181,7 @@ export class MailboxDO extends DurableObject<Env> {
 			...email,
 			read: !!email.read,
 			starred: !!email.starred,
+			tags: (() => { try { return JSON.parse(email.tags || "[]"); } catch { return []; } })(),
 		}));
 	}
 
@@ -577,21 +586,22 @@ export class MailboxDO extends DurableObject<Env> {
 			.select({
 				id: schema.folders.id,
 				name: schema.folders.name,
+				filter_prompt: schema.folders.filter_prompt,
 				unreadCount: sql<number>`COALESCE(SUM(CASE WHEN ${schema.emails.read} = 0 THEN 1 ELSE 0 END), 0)`.mapWith(Number),
 			})
 			.from(schema.folders)
 			.leftJoin(schema.emails, eq(schema.emails.folder_id, schema.folders.id))
-			.groupBy(schema.folders.id, schema.folders.name)
+			.groupBy(schema.folders.id, schema.folders.name, schema.folders.filter_prompt)
 			.all();
 		return result;
 	}
 
-	async createFolder(id: string, name: string, is_deletable: number = 1) {
+	async createFolder(id: string, name: string, is_deletable: number = 1, filter_prompt?: string | null) {
 		try {
 			const result = this.db
 				.insert(schema.folders)
-				.values({ id, name, is_deletable })
-				.returning({ id: schema.folders.id, name: schema.folders.name })
+				.values({ id, name, is_deletable, filter_prompt: filter_prompt ?? null })
+				.returning({ id: schema.folders.id, name: schema.folders.name, filter_prompt: schema.folders.filter_prompt })
 				.get();
 			return { ...result, unreadCount: 0 };
 		} catch (e: unknown) {
@@ -602,14 +612,37 @@ export class MailboxDO extends DurableObject<Env> {
 		}
 	}
 
-	async updateFolder(id: string, name: string) {
+	async updateFolder(id: string, name: string, filter_prompt?: string | null) {
+		const updates: { name: string; filter_prompt?: string | null } = { name };
+		if (filter_prompt !== undefined) {
+			updates.filter_prompt = filter_prompt;
+		}
 		const result = this.db
 			.update(schema.folders)
-			.set({ name })
+			.set(updates)
 			.where(eq(schema.folders.id, id))
-			.returning({ id: schema.folders.id, name: schema.folders.name })
+			.returning({ id: schema.folders.id, name: schema.folders.name, filter_prompt: schema.folders.filter_prompt })
 			.get();
 		return result;
+	}
+
+	async getFoldersWithPrompts(): Promise<Array<{ id: string; name: string; filter_prompt: string }>> {
+		const rows = this.ctx.storage.sql.exec(
+			`SELECT id, name, filter_prompt FROM folders WHERE filter_prompt IS NOT NULL AND filter_prompt != ''`,
+		);
+		return [...rows].map((r: any) => ({
+			id: String(r.id),
+			name: String(r.name),
+			filter_prompt: String(r.filter_prompt),
+		}));
+	}
+
+	async setEmailTags(emailId: string, tags: string[]): Promise<void> {
+		this.ctx.storage.sql.exec(
+			`UPDATE emails SET tags = ?1 WHERE id = ?2`,
+			JSON.stringify(tags),
+			emailId,
+		);
 	}
 
 	async deleteFolder(id: string) {

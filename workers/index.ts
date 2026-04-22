@@ -255,7 +255,8 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		const totalCount = await (stub as any).countThreadedEmails(folder);
 		return c.json({ emails, totalCount });
 	}
-	const emails = await stub.getEmails({ folder, thread_id, page, limit, sortColumn, sortDirection });
+	const tag = c.req.query("tag");
+	const emails = await (stub as any).getEmails({ folder, thread_id, tag, page, limit, sortColumn, sortDirection }) as any[];
 	if (folder) {
 		const totalCount = await stub.countEmails({ folder, thread_id });
 		return c.json({ emails, totalCount });
