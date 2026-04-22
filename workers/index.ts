@@ -140,6 +140,62 @@ app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
 	return c.body(null, 204);
 });
 
+// Avatar upload
+app.post("/api/v1/mailboxes/:mailboxId/avatar", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const formData = await c.req.formData();
+	const file = formData.get("file") as File | null;
+	if (!file) return c.json({ error: "No file provided" }, 400);
+
+	const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+	if (!ALLOWED.includes(file.type))
+		return c.json({ error: "File must be JPEG, PNG, or WebP" }, 400);
+
+	if (file.size > 2 * 1024 * 1024)
+		return c.json({ error: "File must be under 2 MB" }, 400);
+
+	const ext = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
+	const avatarKey = `avatars/${mailboxId}.${ext}`;
+
+	await c.env.BUCKET.put(avatarKey, await file.arrayBuffer(), {
+		httpMetadata: { contentType: file.type },
+	});
+
+	// Clean up old avatar files with other extensions
+	for (const oldExt of ["jpg", "png", "webp"]) {
+		if (`avatars/${mailboxId}.${oldExt}` !== avatarKey) {
+			await c.env.BUCKET.delete(`avatars/${mailboxId}.${oldExt}`).catch(() => {});
+		}
+	}
+
+	const settingsKey = `mailboxes/${mailboxId}.json`;
+	const existing = await c.env.BUCKET.get(settingsKey);
+	const settings = existing ? ((await existing.json()) as Record<string, unknown>) : {};
+	const avatarUrl = `/avatars/${mailboxId}.${ext}`;
+	await c.env.BUCKET.put(settingsKey, JSON.stringify({ ...settings, avatarUrl }));
+
+	return c.json({ avatarUrl });
+});
+
+// Avatar delete
+app.delete("/api/v1/mailboxes/:mailboxId/avatar", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+
+	for (const ext of ["jpg", "png", "webp"]) {
+		await c.env.BUCKET.delete(`avatars/${mailboxId}.${ext}`).catch(() => {});
+	}
+
+	const settingsKey = `mailboxes/${mailboxId}.json`;
+	const existing = await c.env.BUCKET.get(settingsKey);
+	if (existing) {
+		const settings = (await existing.json()) as Record<string, unknown>;
+		const { avatarUrl: _removed, ...rest } = settings;
+		await c.env.BUCKET.put(settingsKey, JSON.stringify(rest));
+	}
+
+	return c.body(null, 204);
+});
+
 // -- Emails ---------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {

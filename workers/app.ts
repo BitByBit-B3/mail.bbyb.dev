@@ -100,6 +100,19 @@ app.all("/agents/*", async (c) => {
 	return c.text("Agent not found", 404);
 });
 
+// Serve avatars from R2
+app.get("/avatars/:filename{.+}", async (c) => {
+	const filename = c.req.param("filename");
+	const obj = await c.env.BUCKET.get(`avatars/${filename}`);
+	if (!obj) return c.text("Not found", 404);
+	return new Response(obj.body, {
+		headers: {
+			"Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+			"Cache-Control": "public, max-age=31536000, immutable",
+		},
+	});
+});
+
 // React Router catch-all: serves the SPA for all non-API routes
 app.all("*", (c) => {
 	return requestHandler(c.req.raw, {
