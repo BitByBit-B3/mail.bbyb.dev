@@ -37,6 +37,14 @@ interface UIState {
 	isAgentPanelOpen: boolean;
 	toggleAgentPanel: () => void;
 
+	// Compose minimize (for floating popover)
+	isComposeMinimized: boolean;
+	toggleComposeMinimize: () => void;
+
+	// Desktop sidebar collapse
+	isSidebarCollapsed: boolean;
+	toggleSidebarCollapsed: () => void;
+
 	// Legacy dialog support (kept for non-split views)
 	isComposeModalOpen: boolean;
 	openComposeModal: (options?: ComposeOptions) => void;
@@ -51,6 +59,8 @@ export const useUIStore = create<UIState>((set, get) => ({
 	isComposeModalOpen: false,
 	isSidebarOpen: false,
 	isAgentPanelOpen: true,
+	isComposeMinimized: false,
+	isSidebarCollapsed: false,
 
 	selectEmail: (id) => set({ selectedEmailId: id, isComposing: false }),
 
@@ -60,6 +70,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 			const isReplyOrForward = mode === "reply" || mode === "reply-all" || mode === "forward";
 			return {
 				isComposing: true,
+				isComposeMinimized: false,
 				_previousEmailId: state.selectedEmailId,
 				// Keep selectedEmailId when replying/forwarding so the thread stays visible
 				selectedEmailId: isReplyOrForward ? state.selectedEmailId : null,
@@ -83,6 +94,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 	toggleSidebar: () => set({ isSidebarOpen: !get().isSidebarOpen }),
 
 	toggleAgentPanel: () => set({ isAgentPanelOpen: !get().isAgentPanelOpen }),
+
+	toggleComposeMinimize: () => set({ isComposeMinimized: !get().isComposeMinimized }),
+	toggleSidebarCollapsed: () => set({ isSidebarCollapsed: !get().isSidebarCollapsed }),
 
 	openComposeModal: (options) =>
 		set({
