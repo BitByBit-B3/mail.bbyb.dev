@@ -11,6 +11,8 @@
 import DOMPurify from "dompurify";
 import { formatQuotedDate } from "shared/dates";
 import type { Attachment } from "~/types";
+import { buildSignatureHtml } from "../../shared/signature";
+import type { SignatureFields } from "../../shared/signature";
 
 export {
 	formatListDate,
@@ -134,17 +136,27 @@ export function escapeHtml(text: string): string {
  */
 export function getSignatureBlock(settings?: {
 	signature?: { enabled: boolean; text?: string; html?: string };
+	signatureFields?: SignatureFields;
+	signatureEnabled?: boolean;
+	avatarUrl?: string;
 }): string {
-	const sig = settings?.signature;
+	if (!settings) return "";
+
+	// Prefer structured signatureFields if present and enabled
+	if (settings.signatureEnabled && settings.signatureFields?.name) {
+		const html = buildSignatureHtml(settings.signatureFields, settings.avatarUrl);
+		return `<div class="b3-signature" style="margin-top:16px">${html}</div>`;
+	}
+
+	// Fall back to legacy signature.enabled/text/html
+	const sig = settings.signature;
 	if (sig?.enabled && (sig?.html || sig?.text)) {
-		// Sanitize HTML signatures with DOMPurify to allow safe formatting
-		// (bold, italic, links, etc.) while stripping scripts and event handlers.
-		// Text signatures are HTML-escaped since they have no formatting.
 		const content = sig.html
 			? DOMPurify.sanitize(sig.html)
 			: escapeHtml(sig.text || "");
 		return `<div style="border-top: 1px solid #ccc; margin-top: 16px; padding-top: 12px;">${content}</div>`;
 	}
+
 	return "";
 }
 
