@@ -5,14 +5,14 @@
 import { Button, Pagination, Tooltip } from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
-	ArrowBendUpLeftIcon,
 	ArrowsClockwiseIcon,
+	CaretDoubleRightIcon,
 	EnvelopeOpenIcon,
 	EnvelopeSimpleIcon,
 	FileIcon,
+	ListIcon,
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
-	StarIcon,
 	TrashIcon,
 	TrayIcon,
 } from "@phosphor-icons/react";
@@ -35,6 +35,23 @@ import { useUIStore } from "~/hooks/useUIStore";
 import type { Email } from "~/types";
 
 const PAGE_SIZE = 25;
+
+type DateBucket = "Today" | "Yesterday" | "This week" | "Older";
+
+function getDateBucket(dateStr: string): DateBucket {
+	const now = new Date();
+	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const yesterdayStart = new Date(todayStart);
+	yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+	const weekStart = new Date(todayStart);
+	weekStart.setDate(weekStart.getDate() - 7);
+	const d = new Date(dateStr);
+	const dStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+	if (dStart >= todayStart) return "Today";
+	if (dStart >= yesterdayStart) return "Yesterday";
+	if (dStart >= weekStart) return "This week";
+	return "Older";
+}
 
 const FOLDER_EMPTY_STATES: Record<
 	string,
@@ -82,20 +99,13 @@ const FOLDER_EMPTY_STATES: Record<
 
 function EmailListSkeleton() {
 	return (
-		<div className="animate-pulse space-y-1 p-2">
-			{Array.from({ length: 8 }).map((_, i) => (
-				<div key={i} className="flex items-center gap-3 px-3 py-3">
-					<div className="w-4 h-4 rounded bg-kumo-fill" />
-					<div className="w-5 h-5 rounded bg-kumo-fill" />
-					<div className="flex-1 space-y-2">
-						<div className="flex items-center gap-2">
-							<div className="h-3 w-24 rounded bg-kumo-fill" />
-							<div className="h-3 w-4 rounded bg-kumo-fill" />
-							<div className="h-3 flex-1 rounded bg-kumo-fill" />
-							<div className="h-3 w-12 rounded bg-kumo-fill" />
-						</div>
-						<div className="h-2.5 w-3/4 rounded bg-kumo-fill" />
-					</div>
+		<div className="animate-pulse">
+			{Array.from({ length: 10 }).map((_, i) => (
+				<div key={i} className="flex items-center gap-2 px-4 h-9 border-b border-kumo-line">
+					<div className="w-4 shrink-0" />
+					<div className="w-44 shrink-0 h-3 rounded bg-kumo-fill" />
+					<div className="flex-1 h-3 rounded bg-kumo-fill mx-2" />
+					<div className="w-16 h-3 rounded bg-kumo-fill shrink-0" />
 				</div>
 			))}
 		</div>
@@ -200,17 +210,6 @@ export default function EmailListRoute() {
 		}
 	}, [mailboxId, folder, closePanel]);
 
-	const toggleStar = (e: React.MouseEvent, email: Email) => {
-		e.preventDefault();
-		e.stopPropagation();
-		if (mailboxId)
-			updateEmail.mutate({
-				mailboxId,
-				id: email.id,
-				data: { starred: !email.starred },
-			});
-	};
-
 	const handleDelete = (e: React.MouseEvent, emailId: string) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -272,16 +271,35 @@ export default function EmailListRoute() {
 	return (
 		<MailboxSplitView>
 				{/* Folder header */}
-				<div className="flex items-center justify-between px-4 py-3.5 border-b border-kumo-line shrink-0 md:px-5">
-					<h1 className="text-lg font-semibold text-kumo-default">
-						{folderName}
-					</h1>
-					<div className="flex items-center gap-1">
-						{totalCount > 0 && (
-							<span className="text-sm text-kumo-subtle mr-2 hidden sm:inline">
-								{totalCount} conversation{totalCount !== 1 ? "s" : ""}
-							</span>
+				<div className="flex items-center justify-between px-3 py-2.5 border-b border-kumo-line shrink-0">
+					<div className="flex items-center gap-1.5">
+						{/* Mobile hamburger */}
+						<Button
+							variant="ghost"
+							shape="square"
+							size="sm"
+							icon={<ListIcon size={18} />}
+							onClick={toggleSidebar}
+							aria-label="Open menu"
+							className="lg:hidden shrink-0"
+						/>
+						{/* Desktop: expand button when sidebar is collapsed */}
+						{isSidebarCollapsed && (
+							<Button
+								variant="ghost"
+								shape="square"
+								size="sm"
+								icon={<CaretDoubleRightIcon size={14} />}
+								onClick={toggleSidebarCollapsed}
+								aria-label="Expand sidebar"
+								className="hidden lg:inline-flex shrink-0"
+							/>
 						)}
+						<h1 className="text-base font-semibold text-kumo-default pl-1">
+							{folderName}
+						</h1>
+					</div>
+					<div className="flex items-center gap-1">
 						<Tooltip
 							content={isRefreshing ? "Refreshing..." : "Refresh"}
 							side="bottom"
@@ -293,7 +311,7 @@ export default function EmailListRoute() {
 								size="sm"
 								icon={
 									<ArrowsClockwiseIcon
-										size={18}
+										size={16}
 										className={isRefreshing ? "animate-spin" : ""}
 									/>
 								}
@@ -310,13 +328,25 @@ export default function EmailListRoute() {
 				{isRefreshing && emails.length === 0 ? (
 					<EmailListSkeleton />
 				) : emails.length > 0 ? (
-						<div>
-							{emails.map((email) => {
-								const isSelected = selectedEmailId === email.id;
-								const snippet = getSnippetText(email.snippet);
-								return (
+					<div>
+						{emails.map((email, idx) => {
+							const isSelected = selectedEmailId === email.id;
+							const snippet = getSnippetText(email.snippet);
+							const bucket = getDateBucket(email.date);
+							const prevBucket = idx > 0 ? getDateBucket(emails[idx - 1].date) : null;
+							const showHeader = bucket !== prevBucket;
+
+							return (
+								<div key={email.id}>
+									{/* Date group header */}
+									{showHeader && (
+										<div className="px-4 py-1.5 text-[11px] font-semibold text-kumo-subtle uppercase tracking-wider bg-kumo-recessed border-b border-kumo-line">
+											{bucket}
+										</div>
+									)}
+
+									{/* Email row — single line 3-column */}
 									<div
-										key={email.id}
 										role="button"
 										tabIndex={0}
 										onClick={() => handleRowClick(email)}
@@ -326,121 +356,105 @@ export default function EmailListRoute() {
 												handleRowClick(email);
 											}
 										}}
-										className={`group flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 ${
-											isSelected ? "bg-kumo-tint" : "hover:bg-kumo-tint"
+										className={`group flex items-center h-9 px-4 cursor-pointer border-b border-kumo-line transition-colors ${
+											isSelected ? "bg-kumo-tint" : "hover:bg-kumo-fill/40"
 										}`}
 									>
 										{/* Unread dot */}
-										<div className="w-2.5 shrink-0 flex justify-center">
+										<div className="w-4 shrink-0 flex justify-center">
 											{hasUnread(email) && (
-												<div className="h-2 w-2 rounded-full bg-kumo-brand" />
+												<div className="w-1.5 h-1.5 rounded-full bg-kumo-brand" />
 											)}
 										</div>
 
-										{/* Star */}
-										<button
-											type="button"
-											className="shrink-0 p-0.5 bg-transparent border-0 cursor-pointer"
-											onClick={(e) => {
-												e.stopPropagation();
-												toggleStar(e, email);
-											}}
-										>
-											<StarIcon
-												size={16}
-												weight={email.starred ? "fill" : "regular"}
-												className={
-													email.starred
-														? "text-kumo-warning"
-														: "text-kumo-subtle hover:text-kumo-warning"
-												}
-											/>
-										</button>
+										{/* Left col: sender + thread count */}
+										<div className="w-44 shrink-0 flex items-center gap-1.5 min-w-0 mr-3">
+											<span
+												className={`text-[13px] truncate ${
+													hasUnread(email)
+														? "font-semibold text-kumo-default"
+														: "font-normal text-kumo-strong"
+												}`}
+											>
+												{formatParticipants(email)}
+											</span>
+											{(email.thread_count ?? 1) > 1 && (
+												<span className="shrink-0 text-[11px] text-kumo-subtle">
+													{email.thread_count}
+												</span>
+											)}
+											{email.has_draft && (
+												<span className="shrink-0 text-[11px] text-kumo-destructive font-medium">
+													Draft
+												</span>
+											)}
+										</div>
 
-										{/* Content */}
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-2">
-												<span
-													className={`truncate text-sm ${hasUnread(email) ? "font-semibold text-kumo-default" : "text-kumo-strong"}`}
-												>
-													{formatParticipants(email)}
-												</span>
-												{(email.thread_count ?? 1) > 1 && (
-													<span className="shrink-0 text-xs text-kumo-subtle bg-kumo-fill rounded-full px-1.5 py-0.5 font-medium">
-														{email.thread_count}
-													</span>
-												)}
-												{email.has_draft && (
-													<span className="shrink-0 text-xs text-kumo-destructive font-medium">
-														Draft
-													</span>
-												)}
-												{email.needs_reply && !email.has_draft && (
-													<Tooltip content="Needs reply" asChild>
-														<span className="shrink-0 text-kumo-warning">
-															<ArrowBendUpLeftIcon size={14} weight="bold" />
-														</span>
-													</Tooltip>
-												)}
-												<span className="text-sm text-kumo-subtle shrink-0 ml-auto">
-													{formatListDate(email.date)}
-												</span>
-											</div>
-											<div className="truncate text-sm mt-0.5">
-												<span
-													className={hasUnread(email) ? "font-medium text-kumo-default" : "text-kumo-subtle"}
-												>
-													{email.subject}
-												</span>
+										{/* Middle col: subject + preview */}
+										<div className="flex-1 min-w-0 flex items-baseline gap-1 mr-2 overflow-hidden">
+											<span
+												className={`text-[13px] truncate shrink-0 max-w-[50%] ${
+													hasUnread(email)
+														? "font-medium text-kumo-default"
+														: "font-normal text-kumo-strong"
+												}`}
+											>
+												{email.subject}
+											</span>
 											{snippet && (
-												<span className="text-kumo-subtle font-normal">
-													{" "}&mdash; {snippet}
+												<span className="text-[13px] text-kumo-subtle truncate">
+													&nbsp;{snippet}
 												</span>
 											)}
 										</div>
-									</div>
 
-										{/* Hover actions */}
-										<div className="hidden group-hover:flex items-center shrink-0">
-											<Tooltip content={email.read ? "Mark unread" : "Mark read"} asChild>
-												<Button
-													variant="ghost"
-													shape="square"
-													size="sm"
-													icon={email.read ? <EnvelopeSimpleIcon size={14} /> : <EnvelopeOpenIcon size={14} />}
-													onClick={(e) => {
-														e.stopPropagation();
-														if (mailboxId)
-															updateEmail.mutate({
-																mailboxId,
-																id: email.id,
-																data: { read: !email.read },
-															});
-													}}
-													aria-label={email.read ? "Mark unread" : "Mark read"}
-												/>
-											</Tooltip>
-											<Tooltip content="Delete" asChild>
-												<Button
-													variant="ghost"
-													shape="square"
-													size="sm"
-													icon={<TrashIcon size={14} />}
-													onClick={(e) => handleDelete(e, email.id)}
-													aria-label="Delete"
-												/>
-											</Tooltip>
+										{/* Right col: date + hover actions */}
+										<div className="w-24 shrink-0 flex items-center justify-end gap-1">
+											<span className="text-[11px] text-kumo-subtle group-hover:hidden tabular-nums">
+												{formatListDate(email.date)}
+											</span>
+											<div className="hidden group-hover:flex items-center">
+												<Tooltip content={email.read ? "Mark unread" : "Mark read"} side="bottom" asChild>
+													<Button
+														variant="ghost"
+														shape="square"
+														size="sm"
+														icon={email.read ? <EnvelopeSimpleIcon size={13} /> : <EnvelopeOpenIcon size={13} />}
+														onClick={(e) => {
+															e.stopPropagation();
+															if (mailboxId)
+																updateEmail.mutate({
+																	mailboxId,
+																	id: email.id,
+																	data: { read: !email.read },
+																});
+														}}
+														aria-label={email.read ? "Mark unread" : "Mark read"}
+													/>
+												</Tooltip>
+												<Tooltip content="Delete" side="bottom" asChild>
+													<Button
+														variant="ghost"
+														shape="square"
+														size="sm"
+														icon={<TrashIcon size={13} />}
+														onClick={(e) => handleDelete(e, email.id)}
+														aria-label="Delete"
+													/>
+												</Tooltip>
+											</div>
 										</div>
 									</div>
-								);
-							})}
-						</div>
-					) : (
-						<FolderEmptyState
-							folder={folder}
-							onCompose={() => startCompose()}
-						/>
-					)}
+								</div>
+							);
+						})}
+					</div>
+				) : (
+					<FolderEmptyState
+						folder={folder}
+						onCompose={() => startCompose()}
+					/>
+				)}
 				</div>
 
 				{/* Pagination */}
