@@ -10,7 +10,7 @@ import type { Editor } from "@tiptap/react";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
 
-export default function ComposePanel() {
+export default function ComposePanel({ hideHeader = false }: { hideHeader?: boolean }) {
 	const { mailboxId, folder } = useParams<{
 		mailboxId: string;
 		folder: string;
@@ -112,22 +112,24 @@ export default function ComposePanel() {
 
 	return (
 		<div className="flex flex-col h-full bg-kumo-base">
-			<div className="flex items-center justify-between px-4 py-3 border-b border-kumo-line shrink-0 md:px-6">
-				<h2 className="text-base font-semibold text-kumo-default">
-					{formTitle}
-				</h2>
-				<div className="flex items-center gap-1">
-					<Button
-						variant="ghost"
-						shape="square"
-						size="sm"
-						icon={<XIcon size={18} />}
-						onClick={closeCompose}
-						disabled={isSending}
-						aria-label="Close compose"
-					/>
+			{!hideHeader && (
+				<div className="flex items-center justify-between px-4 py-3 border-b border-kumo-line shrink-0 md:px-6">
+					<h2 className="text-base font-semibold text-kumo-default">
+						{formTitle}
+					</h2>
+					<div className="flex items-center gap-1">
+						<Button
+							variant="ghost"
+							shape="square"
+							size="sm"
+							icon={<XIcon size={18} />}
+							onClick={closeCompose}
+							disabled={isSending}
+							aria-label="Close compose"
+						/>
+					</div>
 				</div>
-			</div>
+			)}
 
 			<form
 				onSubmit={(e) => handleSend(e, closePanel)}
