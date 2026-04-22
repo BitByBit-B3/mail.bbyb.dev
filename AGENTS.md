@@ -6,7 +6,7 @@ This file provides context for AI coding agents (Codex, GPT-4, Gemini, etc.) wor
 
 ## What This Is
 
-A full-stack email client for the BitByBit team, deployed at `mail.bbyb.dev`. Built on Cloudflare Workers + React + Hono. Handles all `@bbyb.dev` email.
+**B3** = BitByBit (three B's in the name). A full-stack email client for [BitByBit](https://bbyb.dev), deployed at `mail.bbyb.dev`. Built on Cloudflare Workers + React + Hono. Handles all `@bbyb.dev` email.
 
 ---
 
