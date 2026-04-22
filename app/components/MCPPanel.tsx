@@ -12,6 +12,24 @@ import {
 import { useState } from "react";
 import { useParams } from "react-router";
 
+type Snippet = { label: string; code: string };
+
+function CodeSnippet({ label, code }: Snippet) {
+	return (
+		<div className="space-y-1">
+			<span className="text-[11px] font-medium text-kumo-subtle">{label}</span>
+			<div className="relative group">
+				<div className="absolute right-1.5 top-1.5">
+					<CopyButton text={code} />
+				</div>
+				<pre className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line overflow-x-auto leading-relaxed whitespace-pre">
+					{code}
+				</pre>
+			</div>
+		</div>
+	);
+}
+
 function CopyButton({ text }: { text: string }) {
 	const [copied, setCopied] = useState(false);
 
@@ -59,10 +77,32 @@ const TOOLS = [
 ];
 
 export default function MCPPanel() {
-	const { mailboxId } = useParams<{ mailboxId: string }>();
+	useParams<{ mailboxId: string }>();
 	const baseUrl =
-		typeof window !== "undefined" ? window.location.origin : "https://your-app.workers.dev";
+		typeof window !== "undefined" ? window.location.origin : "https://mail.bbyb.dev";
 	const mcpUrl = `${baseUrl}/mcp`;
+
+	const claudeCodeSnippet = `claude mcp add --transport http b3-mail ${mcpUrl}`;
+
+	const claudeJsonSnippet = JSON.stringify(
+		{
+			mcpServers: {
+				"b3-mail": { type: "http", url: mcpUrl },
+			},
+		},
+		null,
+		2,
+	);
+
+	const cursorSnippet = JSON.stringify(
+		{
+			mcpServers: {
+				"b3-mail": { type: "http", url: mcpUrl },
+			},
+		},
+		null,
+		2,
+	);
 
 	return (
 		<div className="flex flex-col h-full">
@@ -106,6 +146,24 @@ export default function MCPPanel() {
 						</div>
 						<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line break-all leading-relaxed">
 							{mcpUrl}
+						</div>
+					</div>
+				</div>
+
+				{/* Quick Setup */}
+				<div className="space-y-2">
+					<h4 className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle px-0.5">
+						Quick Setup
+					</h4>
+					<div className="space-y-3">
+						<div className="space-y-2">
+							<span className="text-[11px] font-semibold text-kumo-default">Claude Code</span>
+							<CodeSnippet label="CLI (recommended)" code={claudeCodeSnippet} />
+							<CodeSnippet label="~/.claude/settings.json" code={claudeJsonSnippet} />
+						</div>
+						<div className="space-y-2">
+							<span className="text-[11px] font-semibold text-kumo-default">Cursor / Other</span>
+							<CodeSnippet label=".cursor/mcp.json" code={cursorSnippet} />
 						</div>
 					</div>
 				</div>
