@@ -191,3 +191,44 @@ export async function verifyDraft(ai: Ai, body: string): Promise<string> {
 function normalizeWhitespace(s: string): string {
 	return s.replace(/\s+/g, " ").trim();
 }
+
+// ── Email Draft Generator ──────────────────────────────────────────
+
+export interface DraftOpts {
+	prompt?: string;
+	subject?: string;
+	to?: string;
+	existing?: string;
+}
+
+export async function generateEmailDraft(
+	ai: Ai,
+	opts: DraftOpts,
+): Promise<ReadableStream<Uint8Array>> {
+	const { prompt, subject, to, existing } = opts;
+
+	const systemPrompt =
+		"You are an email drafting assistant for B3 Internal Mail.\n" +
+		"Write professional, concise email body content only — no subject line, no greeting/sign-off unless asked.\n" +
+		"Return plain text. Do not wrap in markdown.";
+
+	const userPrompt = prompt
+		? existing
+			? `Refine this email draft: "${existing}"\n\nInstruction: ${prompt}`
+			: prompt
+		: `Write an email${to ? ` to ${to}` : ""}${subject ? ` about: ${subject}` : ""}. Be professional and concise.`;
+
+	const response = (await ai.run(
+		// @ts-expect-error — model string not in generated union
+		"@cf/moonshot/kimi-k2-5-chat-long-context",
+		{
+			messages: [
+				{ role: "system", content: systemPrompt },
+				{ role: "user", content: userPrompt },
+			],
+			stream: true,
+		},
+	)) as ReadableStream<Uint8Array>;
+
+	return response;
+}
