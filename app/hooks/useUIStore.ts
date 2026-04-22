@@ -45,10 +45,6 @@ interface UIState {
 	isSidebarCollapsed: boolean;
 	toggleSidebarCollapsed: () => void;
 
-	// Legacy dialog support (kept for non-split views)
-	isComposeModalOpen: boolean;
-	openComposeModal: (options?: ComposeOptions) => void;
-	closeComposeModal: () => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -56,7 +52,6 @@ export const useUIStore = create<UIState>((set, get) => ({
 	isComposing: false,
 	_previousEmailId: null,
 	composeOptions: { mode: "new", originalEmail: null },
-	isComposeModalOpen: false,
 	isSidebarOpen: false,
 	isAgentPanelOpen: true,
 	isComposeMinimized: false,
@@ -98,15 +93,4 @@ export const useUIStore = create<UIState>((set, get) => ({
 	toggleComposeMinimize: () => set({ isComposeMinimized: !get().isComposeMinimized }),
 	toggleSidebarCollapsed: () => set({ isSidebarCollapsed: !get().isSidebarCollapsed }),
 
-	openComposeModal: (options) =>
-		set({
-			composeOptions: options || { mode: "new", originalEmail: null },
-			isComposeModalOpen: true,
-		}),
-
-	closeComposeModal: () =>
-		set({
-			isComposeModalOpen: false,
-			composeOptions: { mode: "new", originalEmail: null },
-		}),
 }));
