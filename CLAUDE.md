@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-B3 Internal Mail is a full-stack email client built on Cloudflare infrastructure. It is deployed at `mail.bbyb.dev` for the BitByBit team and handles all `@bbyb.dev` email addresses via Cloudflare Email Routing.
+B3 Internal Mail is a full-stack email client built on Cloudflare infrastructure for **BitByBit** (bbyb.dev). It is deployed at `mail.bbyb.dev` and handles all `@bbyb.dev` email addresses via Cloudflare Email Routing.
 
 **Cloudflare Account:** BitByBit (`8f0203259905d8923687286c84921e6c`)  
 **Zone:** `bbyb.dev` (Zone ID: `edbc6334a5f99b90be9a2f1c65876826`)
