@@ -458,6 +458,27 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 	}, attachmentData);
 
+	// Forward if enabled
+	const mailboxSettingsObj = await env.BUCKET.get(`mailboxes/${mailboxId}.json`);
+	if (mailboxSettingsObj) {
+		const mailboxSettings = (await mailboxSettingsObj.json()) as {
+			forwarding?: { enabled?: boolean; email?: string };
+		};
+		if (mailboxSettings?.forwarding?.enabled && mailboxSettings.forwarding.email) {
+			ctx.waitUntil(
+				sendEmail(env.EMAIL, {
+					to: mailboxSettings.forwarding.email,
+					from: mailboxId,
+					subject: `Fwd: ${parsedEmail.subject || ""}`,
+					html: parsedEmail.html || `<pre>${parsedEmail.text || ""}</pre>`,
+					text: parsedEmail.text || "",
+				}).catch((e: Error) =>
+					console.error("Email forwarding failed:", e.message),
+				),
+			);
+		}
+	}
+
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));
 	ctx.waitUntil(agentStub.fetch(new Request("https://agents/onNewEmail", {
 		method: "POST", headers: { "Content-Type": "application/json" },
