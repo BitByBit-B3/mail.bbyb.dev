@@ -135,12 +135,25 @@ export default function Sidebar() {
 					<CaretLeftIcon size={14} />
 					<span>Mailboxes</span>
 				</button>
-				<div className="px-1">
-					<div className="text-base font-semibold text-kumo-default truncate">
-						{displayName}
-					</div>
-					<div className="text-sm text-kumo-subtle truncate mt-0.5">
-						{currentMailbox?.email || mailboxId}
+				<div className="flex items-center gap-3 px-1">
+					{currentMailbox?.settings?.avatarUrl ? (
+						<img
+							src={currentMailbox.settings.avatarUrl}
+							alt={displayName}
+							className="h-9 w-9 rounded-full object-cover shrink-0"
+						/>
+					) : (
+						<div className="h-9 w-9 rounded-full bg-kumo-fill flex items-center justify-center text-sm font-semibold text-kumo-default shrink-0">
+							{displayName.charAt(0).toUpperCase()}
+						</div>
+					)}
+					<div className="min-w-0">
+						<div className="text-base font-semibold text-kumo-default truncate">
+							{displayName}
+						</div>
+						<div className="text-sm text-kumo-subtle truncate mt-0.5">
+							{currentMailbox?.email || mailboxId}
+						</div>
 					</div>
 				</div>
 			</div>
