@@ -18,7 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
 import MailboxSplitView from "~/components/MailboxSplitView";
@@ -153,6 +153,9 @@ export default function EmailListRoute() {
 		startCompose,
 	} = useUIStore();
 	const [page, setPage] = useState(1);
+	const [searchParams, setSearchParams] = useSearchParams();
+	const navigate = useNavigate();
+	const activeTag = searchParams.get("tag") || undefined;
 
 	const queryClient = useQueryClient();
 	const updateEmail = useUpdateEmail();
@@ -164,8 +167,9 @@ export default function EmailListRoute() {
 			folder: folder || "",
 			page: String(page),
 			limit: String(PAGE_SIZE),
+			...(activeTag ? { tag: activeTag } : {}),
 		}),
-		[folder, page],
+		[folder, page, activeTag],
 	);
 
 	const {
@@ -183,6 +187,13 @@ export default function EmailListRoute() {
 		if (found) return found.name;
 		return folder ? folder.charAt(0).toUpperCase() + folder.slice(1) : "Inbox";
 	}, [folders, folder]);
+
+	const folderMap = useMemo(
+		() => Object.fromEntries(folders.map((f) => [f.id, f.name])),
+		[folders],
+	);
+
+	const activeTagName = activeTag ? (folderMap[activeTag] || activeTag) : null;
 
 	const isPanelOpen = selectedEmailId !== null || isComposing;
 
@@ -275,9 +286,26 @@ export default function EmailListRoute() {
 		>
 				{/* Folder header */}
 				<div className="flex items-center justify-between px-4 py-3.5 border-b border-kumo-line shrink-0 md:px-5">
+					<div>
 					<h1 className="text-lg font-semibold text-kumo-default">
 						{folderName}
 					</h1>
+					{activeTagName && (
+						<div className="flex items-center gap-1.5 mt-0.5">
+							<span className="text-sm text-kumo-subtle">
+								tagged: <span className="text-kumo-default font-medium">{activeTagName}</span>
+							</span>
+							<button
+								type="button"
+								onClick={() => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("tag"); return next; })}
+								className="text-kumo-subtle hover:text-kumo-default text-sm leading-none bg-transparent border-0 cursor-pointer p-0"
+								aria-label="Remove tag filter"
+							>
+								×
+							</button>
+						</div>
+					)}
+				</div>
 					<div className="flex items-center gap-1">
 						{totalCount > 0 && (
 							<span className="text-sm text-kumo-subtle mr-2 hidden sm:inline">

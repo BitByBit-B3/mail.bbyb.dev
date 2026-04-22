@@ -150,10 +150,10 @@ const api = {
 	// Folders
 	listFolders: (mailboxId: string) =>
 		get<Folder[]>(`/api/v1/mailboxes/${mailboxId}/folders`),
-	createFolder: (mailboxId: string, name: string) =>
-		post<Folder>(`/api/v1/mailboxes/${mailboxId}/folders`, { name }),
-	updateFolder: (mailboxId: string, id: string, name: string) =>
-		put<Folder>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`, { name }),
+	createFolder: (mailboxId: string, name: string, filter_prompt?: string) =>
+		post<Folder>(`/api/v1/mailboxes/${mailboxId}/folders`, { name, ...(filter_prompt ? { filter_prompt } : {}) }),
+	updateFolder: (mailboxId: string, id: string, name: string, filter_prompt?: string | null) =>
+		put<Folder>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`, { name, ...(filter_prompt !== undefined ? { filter_prompt } : {}) }),
 	deleteFolder: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
 

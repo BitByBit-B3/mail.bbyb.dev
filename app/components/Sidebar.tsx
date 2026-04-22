@@ -82,6 +82,7 @@ export default function Sidebar() {
 	const { data: currentMailbox } = useMailbox(mailboxId);
 	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 	const [newFolderName, setNewFolderName] = useState("");
+	const [newFolderPrompt, setNewFolderPrompt] = useState("");
 
 	const customFolders = useMemo(
 		() =>
@@ -97,8 +98,9 @@ export default function Sidebar() {
 	const handleCreateFolder = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (newFolderName.trim() && mailboxId) {
-			createFolderMutation.mutate({ mailboxId, name: newFolderName.trim() });
+			createFolderMutation.mutate({ mailboxId, name: newFolderName.trim(), filter_prompt: newFolderPrompt.trim() || undefined });
 			setNewFolderName("");
+			setNewFolderPrompt("");
 			setIsCreateFolderOpen(false);
 		}
 	};
@@ -253,6 +255,16 @@ export default function Sidebar() {
 							onChange={(e) => setNewFolderName(e.target.value)}
 							required
 						/>
+						<textarea
+							placeholder="AI filter prompt (optional) — e.g. emails about the Nisalvila project or mentioning Nisalvila"
+							value={newFolderPrompt}
+							onChange={(e) => setNewFolderPrompt(e.target.value)}
+							rows={3}
+							className="w-full text-sm rounded-md border border-kumo-line bg-kumo-base px-3 py-2 text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-brand resize-none"
+						/>
+						<p className="text-xs text-kumo-subtle -mt-1">
+							AI will automatically tag matching emails when they arrive.
+						</p>
 						<div className="flex justify-end gap-2">
 							<Dialog.Close
 								render={(props) => (

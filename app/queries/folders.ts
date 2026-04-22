@@ -23,8 +23,9 @@ export function useCreateFolder() {
 		mutationFn: ({
 			mailboxId,
 			name,
-		}: { mailboxId: string; name: string }) =>
-			api.createFolder(mailboxId, name),
+			filter_prompt,
+		}: { mailboxId: string; name: string; filter_prompt?: string }) =>
+			api.createFolder(mailboxId, name, filter_prompt),
 		onSuccess: (_data, { mailboxId }) => {
 			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
 		},
@@ -38,8 +39,9 @@ export function useUpdateFolder() {
 			mailboxId,
 			id,
 			name,
-		}: { mailboxId: string; id: string; name: string }) =>
-			api.updateFolder(mailboxId, id, name),
+			filter_prompt,
+		}: { mailboxId: string; id: string; name: string; filter_prompt?: string | null }) =>
+			api.updateFolder(mailboxId, id, name, filter_prompt),
 		onSuccess: (_data, { mailboxId }) => {
 			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
 		},

@@ -48,6 +48,7 @@ export interface Email {
 	raw_headers?: string | null;
 	attachments?: Attachment[];
 	snippet?: string | null;
+	tags?: string[];
 	// Thread aggregate fields (only present in threaded list view)
 	thread_count?: number;
 	thread_unread_count?: number;
@@ -69,4 +70,5 @@ export interface Folder {
 	id: string;
 	name: string;
 	unreadCount: number;
+	filter_prompt?: string | null;
 }
