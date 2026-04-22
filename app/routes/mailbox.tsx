@@ -5,15 +5,13 @@
 import { useEffect, useRef } from "react";
 import { Outlet, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
-import ComposeEmail from "~/components/ComposeEmail";
-import Header from "~/components/Header";
+import ComposePopover from "~/components/ComposePopover";
 import Sidebar from "~/components/Sidebar";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
-	// Prefetch mailbox data for child components
 	useMailbox(mailboxId);
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
 	const {
@@ -21,7 +19,7 @@ export default function MailboxRoute() {
 		closeSidebar,
 		isAgentPanelOpen,
 		closePanel,
-		closeComposeModal,
+		isSidebarCollapsed,
 	} = useUIStore();
 
 	useEffect(() => {
@@ -31,19 +29,17 @@ export default function MailboxRoute() {
 			prevMailboxIdRef.current !== mailboxId
 		) {
 			closePanel();
-			closeComposeModal();
 			closeSidebar();
 		}
-
 		prevMailboxIdRef.current = mailboxId;
-	}, [mailboxId, closeComposeModal, closePanel, closeSidebar]);
+	}, [mailboxId, closePanel, closeSidebar]);
 
 	return (
-		<div className="flex h-screen overflow-hidden">
+		<div className="flex h-screen overflow-hidden bg-kumo-base">
 			{/* Mobile sidebar overlay backdrop */}
 			{isSidebarOpen && (
 				<div
-					className="fixed inset-0 z-30 bg-black/30 md:hidden"
+					className="fixed inset-0 z-30 bg-black/40 lg:hidden"
 					onClick={closeSidebar}
 					onKeyDown={(e) => e.key === "Escape" && closeSidebar()}
 					role="button"
@@ -52,31 +48,34 @@ export default function MailboxRoute() {
 				/>
 			)}
 
-			{/* Sidebar: hidden on mobile by default, shown as overlay when open */}
+			{/* Sidebar:
+			    - Mobile: fixed overlay, shown/hidden via isSidebarOpen
+			    - Desktop: fixed column in flex layout, hideable via isSidebarCollapsed */}
 			<div
-				className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 ${
-					isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-				}`}
+				className={`
+					fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 ease-in-out
+					lg:relative lg:z-0 lg:translate-x-0 lg:transition-none
+					${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+					${isSidebarCollapsed ? "lg:hidden" : ""}
+				`}
 			>
 				<Sidebar />
 			</div>
 
-			{/* Main content */}
-			<div className="flex-1 flex flex-col min-w-0 bg-kumo-base">
-				<Header />
-				<main className="flex-1 overflow-hidden">
-					<Outlet />
-				</main>
-			</div>
+			{/* Main content: email list + reading pane */}
+			<main className="flex-1 min-w-0 overflow-hidden">
+				<Outlet />
+			</main>
 
-			{/* Agent + MCP sidebar -- togglable on desktop */}
+			{/* Agent + MCP sidebar — togglable on desktop */}
 			{isAgentPanelOpen && (
 				<div className="hidden lg:flex w-[380px] shrink-0 border-l border-kumo-line flex-col bg-kumo-base overflow-hidden">
 					<AgentSidebar />
 				</div>
 			)}
 
-			<ComposeEmail />
+			{/* Floating compose popover */}
+			<ComposePopover />
 		</div>
 	);
 }
