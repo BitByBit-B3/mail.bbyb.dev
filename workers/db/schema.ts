@@ -8,6 +8,7 @@ export const folders = sqliteTable("folders", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull().unique(),
 	is_deletable: integer("is_deletable").notNull().default(1),
+	filter_prompt: text("filter_prompt"),
 });
 
 export const emails = sqliteTable("emails", {
@@ -29,6 +30,7 @@ export const emails = sqliteTable("emails", {
 	thread_id: text("thread_id"),
 	message_id: text("message_id"),
 	raw_headers: text("raw_headers"),
+	tags: text("tags").notNull().default("[]"),
 });
 
 export const attachments = sqliteTable("attachments", {

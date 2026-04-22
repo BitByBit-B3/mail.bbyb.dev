@@ -168,4 +168,11 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		name: "9_add_ai_tags",
+		sql: txn(`
+			ALTER TABLE folders ADD COLUMN filter_prompt TEXT;
+			ALTER TABLE emails ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+		`),
+	},
 ];
