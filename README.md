@@ -1,6 +1,6 @@
 # B3 Internal Mail
 
-Internal email client for the [BitByBit](https://bbyb.dev) team, built on Cloudflare infrastructure. Handles all `@bbyb.dev` email addresses with an AI-powered agent, MCP server integration, and a modern React UI.
+**B3** = BitByBit — the internal email client for [BitByBit](https://bbyb.dev), built on Cloudflare infrastructure. Handles all `@bbyb.dev` email addresses with an AI-powered agent, MCP server integration, and a modern React UI.
 
 **Live:** [mail.bbyb.dev](https://mail.bbyb.dev) — Cloudflare Access protected (BitByBit team only)
 
