@@ -343,12 +343,6 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 		attachments,
 		(attachmentId) => lookupAttachment(c, attachmentId),
 	);
-	if (draft_id) {
-		const deletedAttachments = await stub.deleteEmail(draft_id); // not atomic — create-then-delete would be safer
-		if (deletedAttachments?.length) {
-			await deleteAttachmentBlobs(c.env.BUCKET, draft_id, deletedAttachments);
-		}
-	}
 	const messageId = crypto.randomUUID();
 	const now = new Date().toISOString();
 	const attachmentData = await storeMaterializedAttachments(
@@ -362,6 +356,13 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 		date: now, body, in_reply_to: in_reply_to || null, email_references: null,
 		thread_id: thread_id || in_reply_to || messageId,
 	}, attachmentData);
+	// Delete old draft only after new one is safely persisted
+	if (draft_id) {
+		const deletedAttachments = await stub.deleteEmail(draft_id);
+		if (deletedAttachments?.length) {
+			await deleteAttachmentBlobs(c.env.BUCKET, draft_id, deletedAttachments);
+		}
+	}
 	return c.json({ id: messageId, status: "draft", subject: subject || "", recipient: to || "", date: now }, 201);
 });
 
@@ -530,7 +531,7 @@ async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: Execu
 			const filename = (att.filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
 			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, att.content);
 			attachmentData.push({ id: attId, email_id: messageId, filename, mimetype: att.mimeType,
-				size: typeof att.content === "string" ? att.content.length : att.content.byteLength,
+				size: att.content instanceof ArrayBuffer ? att.content.byteLength : new TextEncoder().encode(att.content).byteLength,
 				content_id: att.contentId || null, disposition: att.disposition || "attachment" });
 		}
 	}
