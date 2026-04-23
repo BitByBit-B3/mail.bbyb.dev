@@ -55,6 +55,7 @@ export interface Email {
 	participants?: string;
 	needs_reply?: boolean;
 	has_draft?: boolean;
+	has_attachment?: boolean;
 }
 
 export interface Attachment {

@@ -169,6 +169,7 @@ export class MailboxDO extends DurableObject<Env> {
 				folder_id: schema.emails.folder_id,
 				tags: schema.emails.tags,
 				snippet: sql<string>`SUBSTR(${schema.emails.body}, 1, 300)`,
+				has_attachment: sql<number>`EXISTS (SELECT 1 FROM attachments WHERE email_id = ${schema.emails.id})`,
 			})
 			.from(schema.emails)
 			.where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -181,6 +182,7 @@ export class MailboxDO extends DurableObject<Env> {
 			...email,
 			read: !!email.read,
 			starred: !!email.starred,
+			has_attachment: !!email.has_attachment,
 			tags: (() => { try { return JSON.parse(email.tags || "[]"); } catch { return []; } })(),
 		}));
 	}
@@ -275,9 +277,10 @@ export class MailboxDO extends DurableObject<Env> {
 				SELECT
 					lp.id, lp.subject, lp.sender, lp.recipient, lp.date,
 					lp.read, lp.starred, lp.thread_id, lp.folder_id,
-					lp.in_reply_to, lp.email_references,
+					lp.in_reply_to, lp.email_references, lp.tags,
 					SUBSTR(lp.body, 1, 300) as snippet,
-					ds.thread_count, ds.thread_unread_count, ds.participants
+					ds.thread_count, ds.thread_unread_count, ds.participants,
+					EXISTS (SELECT 1 FROM attachments WHERE email_id = lp.id) as has_attachment
 				FROM latest_per_group lp
 				JOIN draft_stats ds ON lp.draft_group_key = ds.draft_group_key
 				WHERE lp.rn = 1
@@ -291,9 +294,11 @@ export class MailboxDO extends DurableObject<Env> {
 				...row,
 				read: !!row.read,
 				starred: !!row.starred,
+				has_attachment: !!row.has_attachment,
 				thread_count: row.thread_count || 1,
 				thread_unread_count: row.thread_unread_count || 0,
 				participants: row.participants || row.sender,
+				tags: (() => { try { return JSON.parse(row.tags || "[]"); } catch { return []; } })(),
 			}));
 		}
 
@@ -363,14 +368,15 @@ export class MailboxDO extends DurableObject<Env> {
 			SELECT
 				lif.id, lif.subject, lif.sender, lif.recipient, lif.date,
 				lif.read, lif.starred, lif.thread_id, lif.folder_id,
-				lif.in_reply_to, lif.email_references,
+				lif.in_reply_to, lif.email_references, lif.tags,
 				SUBSTR(lif.body, 1, 300) as snippet,
 				cs.thread_count, cs.thread_unread_count, cs.participants,
 				CASE WHEN lmc.folder_id != (SELECT id FROM folders WHERE name = 'sent' LIMIT 1)
 					AND lmc.folder_id != (SELECT id FROM folders WHERE name = 'draft' LIMIT 1)
 					AND cs.thread_read_count > 0
 					THEN 1 ELSE 0 END as needs_reply,
-				CASE WHEN cs.has_draft > 0 THEN 1 ELSE 0 END as has_draft
+				CASE WHEN cs.has_draft > 0 THEN 1 ELSE 0 END as has_draft,
+				EXISTS (SELECT 1 FROM attachments WHERE email_id = lif.id) as has_attachment
 			FROM latest_in_folder lif
 			JOIN conversation_stats cs ON lif.conversation_id = cs.conversation_id
 			LEFT JOIN latest_message_per_conversation lmc
@@ -386,11 +392,13 @@ export class MailboxDO extends DurableObject<Env> {
 			...row,
 			read: !!row.read,
 			starred: !!row.starred,
+			has_attachment: !!row.has_attachment,
 			thread_count: row.thread_count || 1,
 			thread_unread_count: row.thread_unread_count || 0,
 			participants: row.participants || row.sender,
 			needs_reply: !!row.needs_reply,
 			has_draft: !!row.has_draft,
+			tags: (() => { try { return JSON.parse(row.tags || "[]"); } catch { return []; } })(),
 		}));
 	}
 

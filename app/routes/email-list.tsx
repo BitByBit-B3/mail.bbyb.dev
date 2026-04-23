@@ -10,6 +10,7 @@ import {
 	EnvelopeOpenIcon,
 	EnvelopeSimpleIcon,
 	FileIcon,
+	PaperclipIcon,
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
 	StarIcon,
@@ -18,7 +19,7 @@ import {
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
 import MailboxSplitView from "~/components/MailboxSplitView";
@@ -154,7 +155,7 @@ export default function EmailListRoute() {
 	} = useUIStore();
 	const [page, setPage] = useState(1);
 	const [searchParams, setSearchParams] = useSearchParams();
-	const navigate = useNavigate();
+
 	const activeTag = searchParams.get("tag") || undefined;
 
 	const queryClient = useQueryClient();
@@ -412,21 +413,45 @@ export default function EmailListRoute() {
 														</span>
 													</Tooltip>
 												)}
+												{email.has_attachment && (
+													<Tooltip content="Has attachment" asChild>
+														<span className="shrink-0 text-kumo-subtle">
+															<PaperclipIcon size={13} />
+														</span>
+													</Tooltip>
+												)}
 												<span className="text-sm text-kumo-subtle shrink-0 ml-auto">
 													{formatListDate(email.date)}
 												</span>
 											</div>
-											<div className="truncate text-sm mt-0.5">
+											<div className="flex items-center gap-1.5 text-sm mt-0.5 min-w-0">
 												<span
-													className={hasUnread(email) ? "font-medium text-kumo-default" : "text-kumo-subtle"}
+													className={`truncate ${hasUnread(email) ? "font-medium text-kumo-default" : "text-kumo-subtle"}`}
 												>
 													{email.subject}
 												</span>
-											{snippet && (
-												<span className="text-kumo-subtle font-normal">
-													{" "}&mdash; {snippet}
+											{snippet && !email.tags?.length && (
+												<span className="text-kumo-subtle font-normal shrink-0 truncate">
+													&mdash; {snippet}
 												</span>
 											)}
+											{email.tags?.map((tagId) => (
+												<button
+													key={tagId}
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														setSearchParams((prev) => {
+															const next = new URLSearchParams(prev);
+															next.set("tag", tagId);
+															return next;
+														});
+													}}
+													className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-kumo-brand/10 text-kumo-brand border border-kumo-brand/20 font-medium hover:bg-kumo-brand/20 cursor-pointer"
+												>
+													{folderMap[tagId] || tagId}
+												</button>
+											))}
 										</div>
 									</div>
 
