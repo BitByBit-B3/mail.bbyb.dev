@@ -224,6 +224,7 @@ export class MailboxDO extends DurableObject<Env> {
 	async getThreadedEmails(options: GetEmailsOptions = {}) {
 		const {
 			folder,
+			tag,
 			page = 1,
 			limit: rawLimit = 25,
 		} = options;
@@ -246,6 +247,8 @@ export class MailboxDO extends DurableObject<Env> {
 		//   2. Fallback: group by normalized subject (strips Re:/Fwd:/FW: prefixes)
 		//      for legacy emails that lack threading headers (thread_id IS NULL).
 		const isDraftFolder = folder === Folders.DRAFT;
+		const tagFilter = tag ? `AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?4)` : "";
+		const baseParams: (string | number)[] = tag ? [folder, limit, offset, tag] : [folder, limit, offset];
 
 		if (isDraftFolder) {
 			const result = this.ctx.storage.sql.exec(
@@ -255,6 +258,7 @@ export class MailboxDO extends DurableObject<Env> {
 						COALESCE(in_reply_to, id) as draft_group_key
 					FROM emails
 					WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
+					${tagFilter}
 				),
 				draft_stats AS (
 					SELECT
@@ -286,7 +290,7 @@ export class MailboxDO extends DurableObject<Env> {
 				WHERE lp.rn = 1
 				ORDER BY lp.date DESC
 				LIMIT ?2 OFFSET ?3`,
-				folder, limit, offset
+				...baseParams
 			);
 
 			const rows = [...result];
@@ -311,6 +315,7 @@ export class MailboxDO extends DurableObject<Env> {
 					${NORMALIZED_SUBJECT_SQL} as normalized_subject
 				FROM emails
 				WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
+				${tagFilter}
 			),
 			thread_to_conversation AS (
 				SELECT
@@ -384,7 +389,7 @@ export class MailboxDO extends DurableObject<Env> {
 			WHERE lif.rn = 1
 			ORDER BY lif.date DESC
 			LIMIT ?2 OFFSET ?3`,
-			folder, limit, offset
+			...baseParams
 		);
 
 		const rows = [...result];
@@ -406,21 +411,25 @@ export class MailboxDO extends DurableObject<Env> {
 	 * Count threaded conversations in a folder (for pagination).
 	 * Returns the number of conversation groups, not individual emails.
 	 */
-	async countThreadedEmails(folder: string) {
+	async countThreadedEmails(folder: string, tag?: string) {
 		const isDraftFolder = folder === Folders.DRAFT;
+		const tagFilter = tag ? `AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?2)` : "";
 
 		if (isDraftFolder) {
+			const params: (string)[] = tag ? [folder, tag] : [folder];
 			const row = [
 				...this.ctx.storage.sql.exec(
 					`SELECT COUNT(DISTINCT COALESCE(in_reply_to, id)) as total
 					 FROM emails
-					 WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)`,
-					folder,
+					 WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
+					 ${tagFilter}`,
+					...params,
 				),
 			][0] as { total: number } | undefined;
 			return row?.total ?? 0;
 		}
 
+		const params: (string)[] = tag ? [folder, tag] : [folder];
 		const row = [
 			...this.ctx.storage.sql.exec(
 				`WITH
@@ -431,6 +440,7 @@ export class MailboxDO extends DurableObject<Env> {
 					${NORMALIZED_SUBJECT_SQL} as normalized_subject
 					FROM emails
 					WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
+					${tagFilter}
 				),
 				thread_to_conversation AS (
 					SELECT
@@ -445,7 +455,7 @@ export class MailboxDO extends DurableObject<Env> {
 				)
 				SELECT COUNT(DISTINCT conversation_id) as total
 				FROM thread_to_conversation`,
-				folder,
+				...params,
 			),
 		][0] as { total: number } | undefined;
 		return row?.total ?? 0;

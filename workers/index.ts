@@ -264,13 +264,13 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const sortColumn = c.req.query("sortColumn") as any;
 	const sortDirection = c.req.query("sortDirection") as "ASC" | "DESC" | undefined;
 	const stub = c.var.mailboxStub;
+	const tag = c.req.query("tag");
 
 	if (threaded && folder) {
-		const emails = await (stub as any).getThreadedEmails({ folder, page, limit });
-		const totalCount = await (stub as any).countThreadedEmails(folder);
+		const emails = await (stub as any).getThreadedEmails({ folder, page, limit, tag });
+		const totalCount = await (stub as any).countThreadedEmails(folder, tag);
 		return c.json({ emails, totalCount });
 	}
-	const tag = c.req.query("tag");
 	const emails = await (stub as any).getEmails({ folder, thread_id, tag, page, limit, sortColumn, sortDirection }) as any[];
 	if (folder) {
 		const totalCount = await stub.countEmails({ folder, thread_id });
@@ -470,6 +470,8 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 		"Content-Type",
 		obj.httpMetadata?.contentType || attachment.mimetype || "application/octet-stream",
 	);
+	headers.set("Content-Length", obj.size.toString());
+	headers.set("Cache-Control", "private, max-age=3600");
 	const sanitized = attachment.filename.replace(/[\x00-\x1f"\\]/g, "_");
 	headers.set(
 		"Content-Disposition",
@@ -529,7 +531,9 @@ async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: Execu
 		for (const att of parsedEmail.attachments) {
 			const attId = crypto.randomUUID();
 			const filename = (att.filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
-			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, att.content);
+			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, att.content, {
+					httpMetadata: { contentType: att.mimeType || "application/octet-stream" },
+				});
 			attachmentData.push({ id: attId, email_id: messageId, filename, mimetype: att.mimeType,
 				size: att.content instanceof ArrayBuffer ? att.content.byteLength : new TextEncoder().encode(att.content).byteLength,
 				content_id: att.contentId || null, disposition: att.disposition || "attachment" });
