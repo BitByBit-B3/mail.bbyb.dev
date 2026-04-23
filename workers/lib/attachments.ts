@@ -40,7 +40,8 @@ function sanitizeFilename(filename: string) {
 }
 
 function decodeBase64(content: string) {
-	const binaryStr = atob(content);
+	// Strip whitespace — MIME base64 may have \r\n line breaks that atob() rejects
+	const binaryStr = atob(content.replace(/\s/g, ""));
 	return Uint8Array.from(binaryStr, (char) => char.charCodeAt(0));
 }
 

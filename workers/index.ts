@@ -464,20 +464,23 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	if (!attachment) return c.json({ error: "Attachment not found" }, 404);
 	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
 	if (!obj) return c.json({ error: "Attachment file not found" }, 404);
+	// Buffer fully — streaming strips Content-Length in Workers, causing truncated downloads
+	const bytes = await obj.arrayBuffer();
 	const headers = new Headers();
+	obj.writeHttpMetadata(headers);
+	// Fallback content-type if not stored in R2 metadata
+	if (!headers.get("Content-Type")) {
+		headers.set("Content-Type", attachment.mimetype || "application/octet-stream");
+	}
+	headers.set("Content-Length", bytes.byteLength.toString());
+	headers.set("Cache-Control", "private, no-store");
 	const disposition = c.req.query("disposition") === "inline" ? "inline" : "attachment";
-	headers.set(
-		"Content-Type",
-		obj.httpMetadata?.contentType || attachment.mimetype || "application/octet-stream",
-	);
-	headers.set("Content-Length", obj.size.toString());
-	headers.set("Cache-Control", "private, max-age=3600");
 	const sanitized = attachment.filename.replace(/[\x00-\x1f"\\]/g, "_");
 	headers.set(
 		"Content-Disposition",
 		`${disposition}; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
 	);
-	return new Response(obj.body, { headers });
+	return new Response(bytes, { headers });
 });
 
 // -- Receive inbound email ------------------------------------------
