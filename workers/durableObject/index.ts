@@ -169,7 +169,7 @@ export class MailboxDO extends DurableObject<Env> {
 				folder_id: schema.emails.folder_id,
 				tags: schema.emails.tags,
 				snippet: sql<string>`SUBSTR(${schema.emails.body}, 1, 300)`,
-				has_attachment: sql<number>`EXISTS (SELECT 1 FROM attachments WHERE email_id = ${schema.emails.id})`,
+				has_attachment: sql<number>`EXISTS (SELECT 1 FROM "attachments" WHERE "email_id" = "emails"."id")`,
 			})
 			.from(schema.emails)
 			.where(conditions.length > 0 ? and(...conditions) : undefined)
