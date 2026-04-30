@@ -587,6 +587,22 @@ export class MailboxDO extends DurableObject<Env> {
 		return emailAttachments;
 	}
 
+	async listAllAttachments() {
+		return this.db
+			.select({
+				id: schema.attachments.id,
+				email_id: schema.attachments.email_id,
+				filename: schema.attachments.filename,
+				mimetype: schema.attachments.mimetype,
+				size: schema.attachments.size,
+			})
+			.from(schema.attachments)
+			.innerJoin(schema.emails, eq(schema.attachments.email_id, schema.emails.id))
+			.orderBy(desc(schema.emails.date))
+			.limit(30)
+			.all();
+	}
+
 	async getAttachment(id: string) {
 		return (
 			this.db

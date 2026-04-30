@@ -483,6 +483,40 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	return new Response(bytes, { headers });
 });
 
+// Diagnostic: list every attachment in the mailbox with R2 head bytes so we can
+// tell at a glance whether stored bytes look like proper binary or base64 text.
+app.get("/api/v1/mailboxes/:mailboxId/_debug/attachments", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const stub = c.var.mailboxStub as unknown as {
+		listAllAttachments: () => Promise<Array<{ id: string; email_id: string; filename: string; mimetype: string; size: number }>>;
+	};
+	const rows = await stub.listAllAttachments();
+	const limit = Math.min(rows.length, 30);
+	const out: unknown[] = [];
+	for (let i = 0; i < limit; i++) {
+		const row = rows[i];
+		const obj = await c.env.BUCKET.get(`attachments/${row.email_id}/${row.id}/${row.filename}`);
+		if (!obj) {
+			out.push({ ...row, r2: "MISSING" });
+			continue;
+		}
+		const buf = new Uint8Array(await obj.arrayBuffer());
+		const head_hex = Array.from(buf.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+		const head_ascii = Array.from(buf.slice(0, 16)).map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".")).join("");
+		out.push({
+			email_id: row.email_id,
+			att_id: row.id,
+			filename: row.filename,
+			mimetype: row.mimetype,
+			do_size: row.size,
+			r2_size: buf.byteLength,
+			head_hex,
+			head_ascii,
+		});
+	}
+	return c.json({ mailbox: mailboxId, count: rows.length, shown: limit, attachments: out });
+});
+
 // Diagnostic: dump head/tail magic bytes for an attachment so we can tell
 // whether stored bytes are corrupt vs. just a serving problem.
 app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId/_debug", async (c: AppContext) => {
