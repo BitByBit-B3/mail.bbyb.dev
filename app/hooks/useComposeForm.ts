@@ -226,8 +226,22 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setIsAddingAttachments(true);
 
 		try {
+			// Cloudflare Email Service rejects large messages — cap total at ~20 MB raw,
+			// which is roughly 15 MB after base64 + headers overhead.
+			const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+			const incoming = Array.from(files);
+			const currentSize = attachments.reduce((sum, a) => sum + (a.size || 0), 0);
+			const incomingSize = incoming.reduce((sum, f) => sum + f.size, 0);
+			if (currentSize + incomingSize > MAX_TOTAL_BYTES) {
+				toastManager.add({
+					title: `Attachments exceed 20 MB limit.`,
+					variant: "error",
+				});
+				return;
+			}
+
 			const results = await Promise.allSettled(
-				Array.from(files).map((file) => readFilesAsComposeAttachments([file])),
+				incoming.map((file) => readFilesAsComposeAttachments([file])),
 			);
 			const addedAttachments = results
 				.flatMap((result) =>

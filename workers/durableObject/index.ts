@@ -758,7 +758,8 @@ export class MailboxDO extends DurableObject<Env> {
 				e.read, e.starred, e.in_reply_to, e.email_references,
 				e.thread_id, e.folder_id,
 				SUBSTR(e.body, 1, 300) as snippet,
-				f.name as folder_name
+				f.name as folder_name,
+				EXISTS (SELECT 1 FROM attachments WHERE email_id = e.id) as has_attachment
 			FROM emails e
 			LEFT JOIN folders f ON e.folder_id = f.id
 			${where}
@@ -770,6 +771,7 @@ export class MailboxDO extends DurableObject<Env> {
 			...row,
 			read: !!row.read,
 			starred: !!row.starred,
+			has_attachment: !!row.has_attachment,
 		}));
 	}
 

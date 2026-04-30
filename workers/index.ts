@@ -461,7 +461,7 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	const emailId = c.req.param("emailId")!;
 	const attachmentId = c.req.param("attachmentId")!;
 	const attachment = await c.var.mailboxStub.getAttachment(attachmentId);
-	if (!attachment) return c.json({ error: "Attachment not found" }, 404);
+	if (!attachment || attachment.email_id !== emailId) return c.json({ error: "Attachment not found" }, 404);
 	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
 	if (!obj) return c.json({ error: "Attachment file not found" }, 404);
 	// Buffer fully — streaming strips Content-Length in Workers, causing truncated downloads
@@ -534,11 +534,22 @@ async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: Execu
 		for (const att of parsedEmail.attachments) {
 			const attId = crypto.randomUUID();
 			const filename = (att.filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
-			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, att.content, {
-					httpMetadata: { contentType: att.mimeType || "application/octet-stream" },
-				});
-			attachmentData.push({ id: attId, email_id: messageId, filename, mimetype: att.mimeType,
-				size: att.content instanceof ArrayBuffer ? att.content.byteLength : new TextEncoder().encode(att.content).byteLength,
+			// Normalize content to bytes — PostalMime may return ArrayBuffer, typed array, or string
+			const raw: unknown = att.content;
+			let bytes: Uint8Array;
+			if (raw instanceof ArrayBuffer) {
+				bytes = new Uint8Array(raw);
+			} else if (ArrayBuffer.isView(raw)) {
+				bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+			} else {
+				bytes = new TextEncoder().encode(String(raw ?? ""));
+			}
+			const mimetype = att.mimeType || "application/octet-stream";
+			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, bytes, {
+				httpMetadata: { contentType: mimetype },
+			});
+			attachmentData.push({ id: attId, email_id: messageId, filename, mimetype,
+				size: bytes.byteLength,
 				content_id: att.contentId || null, disposition: att.disposition || "attachment" });
 		}
 	}
