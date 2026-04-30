@@ -150,9 +150,20 @@ app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
 
 app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
 	const mailboxId = c.req.param("mailboxId")!;
-	const key = `mailboxes/${mailboxId}.json`;
-	if (!(await c.env.BUCKET.head(key))) return c.json({ error: "Not found" }, 404);
-	await c.env.BUCKET.delete(key); // TODO: also delete DO data and R2 attachment blobs
+	const settingsKey = `mailboxes/${mailboxId}.json`;
+	if (!(await c.env.BUCKET.head(settingsKey))) return c.json({ error: "Not found" }, 404);
+
+	const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(mailboxId)) as unknown as {
+		wipeMailbox: () => Promise<{ attachmentKeys: string[] }>;
+	};
+	const { attachmentKeys } = await stub.wipeMailbox();
+
+	const avatarKey = `avatars/${mailboxId}`;
+	const keysToDelete = [settingsKey, avatarKey, ...attachmentKeys];
+	// R2 delete accepts up to 1000 keys per call.
+	for (let i = 0; i < keysToDelete.length; i += 1000) {
+		await c.env.BUCKET.delete(keysToDelete.slice(i, i + 1000));
+	}
 	return c.body(null, 204);
 });
 
@@ -481,141 +492,6 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 		`${disposition}; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
 	);
 	return new Response(bytes, { headers });
-});
-
-// Repair: fix attachments that were stored as base64-text instead of binary.
-// Idempotent — only rewrites if the head looks like base64-encoded text and
-// the decoded result starts with a known magic number.
-app.post("/api/v1/mailboxes/:mailboxId/_debug/repair-attachments", async (c: AppContext) => {
-	const stub = c.var.mailboxStub as unknown as {
-		listAllAttachments: () => Promise<Array<{ id: string; email_id: string; filename: string; mimetype: string; size: number }>>;
-		updateAttachmentSize: (id: string, size: number) => Promise<void>;
-	};
-	const rows = await stub.listAllAttachments();
-	const results: Array<Record<string, unknown>> = [];
-
-	const knownMagics: Array<{ name: string; bytes: number[] }> = [
-		{ name: "PDF", bytes: [0x25, 0x50, 0x44, 0x46] },               // %PDF
-		{ name: "PNG", bytes: [0x89, 0x50, 0x4e, 0x47] },               // .PNG
-		{ name: "JPEG", bytes: [0xff, 0xd8, 0xff] },                    // JPEG SOI
-		{ name: "GIF", bytes: [0x47, 0x49, 0x46, 0x38] },               // GIF8
-		{ name: "ZIP", bytes: [0x50, 0x4b, 0x03, 0x04] },               // PK..  (also docx/xlsx/pptx/zip)
-		{ name: "GZIP", bytes: [0x1f, 0x8b, 0x08] },                    // gzip
-		{ name: "DOC_OLE", bytes: [0xd0, 0xcf, 0x11, 0xe0] },           // MS Office legacy
-	];
-	const looksValidMagic = (bytes: Uint8Array) =>
-		knownMagics.some((m) => m.bytes.every((b, i) => bytes[i] === b));
-
-	for (const row of rows) {
-		const key = `attachments/${row.email_id}/${row.id}/${row.filename}`;
-		const obj = await c.env.BUCKET.get(key);
-		if (!obj) {
-			results.push({ id: row.id, filename: row.filename, action: "missing" });
-			continue;
-		}
-		const buf = new Uint8Array(await obj.arrayBuffer());
-		if (looksValidMagic(buf)) {
-			results.push({ id: row.id, filename: row.filename, action: "skip-already-binary" });
-			continue;
-		}
-		// If every byte in the head is a valid base64 character, the body is base64 text.
-		const head = buf.slice(0, Math.min(64, buf.byteLength));
-		const looksBase64 = head.every(
-			(b) =>
-				(b >= 0x41 && b <= 0x5a) || // A-Z
-				(b >= 0x61 && b <= 0x7a) || // a-z
-				(b >= 0x30 && b <= 0x39) || // 0-9
-				b === 0x2b || b === 0x2f || b === 0x3d || // + / =
-				b === 0x0a || b === 0x0d || b === 0x09 || b === 0x20, // whitespace
-		);
-		if (!looksBase64) {
-			results.push({ id: row.id, filename: row.filename, action: "skip-unknown-format", head_hex: Array.from(head.slice(0, 16)).map((b) => b.toString(16)).join(" ") });
-			continue;
-		}
-		try {
-			const text = new TextDecoder("ascii").decode(buf).replace(/\s/g, "");
-			const bin = atob(text);
-			const decoded = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
-			if (!looksValidMagic(decoded)) {
-				results.push({ id: row.id, filename: row.filename, action: "skip-decoded-still-not-magic", decoded_head_hex: Array.from(decoded.slice(0, 16)).map((b) => b.toString(16)).join(" ") });
-				continue;
-			}
-			await c.env.BUCKET.put(key, decoded, {
-				httpMetadata: { contentType: row.mimetype || "application/octet-stream" },
-			});
-			await stub.updateAttachmentSize(row.id, decoded.byteLength);
-			results.push({
-				id: row.id,
-				filename: row.filename,
-				action: "repaired",
-				old_size: row.size,
-				new_size: decoded.byteLength,
-			});
-		} catch (e) {
-			results.push({ id: row.id, filename: row.filename, action: "error", message: (e as Error).message });
-		}
-	}
-	return c.json({ count: results.length, results });
-});
-
-// Diagnostic: list every attachment in the mailbox with R2 head bytes so we can
-// tell at a glance whether stored bytes look like proper binary or base64 text.
-app.get("/api/v1/mailboxes/:mailboxId/_debug/attachments", async (c: AppContext) => {
-	const mailboxId = c.req.param("mailboxId")!;
-	const stub = c.var.mailboxStub as unknown as {
-		listAllAttachments: () => Promise<Array<{ id: string; email_id: string; filename: string; mimetype: string; size: number }>>;
-	};
-	const rows = await stub.listAllAttachments();
-	const limit = Math.min(rows.length, 30);
-	const out: unknown[] = [];
-	for (let i = 0; i < limit; i++) {
-		const row = rows[i];
-		const obj = await c.env.BUCKET.get(`attachments/${row.email_id}/${row.id}/${row.filename}`);
-		if (!obj) {
-			out.push({ ...row, r2: "MISSING" });
-			continue;
-		}
-		const buf = new Uint8Array(await obj.arrayBuffer());
-		const head_hex = Array.from(buf.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join(" ");
-		const head_ascii = Array.from(buf.slice(0, 16)).map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".")).join("");
-		out.push({
-			email_id: row.email_id,
-			att_id: row.id,
-			filename: row.filename,
-			mimetype: row.mimetype,
-			do_size: row.size,
-			r2_size: buf.byteLength,
-			head_hex,
-			head_ascii,
-		});
-	}
-	return c.json({ mailbox: mailboxId, count: rows.length, shown: limit, attachments: out });
-});
-
-// Diagnostic: dump head/tail magic bytes for an attachment so we can tell
-// whether stored bytes are corrupt vs. just a serving problem.
-app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId/_debug", async (c: AppContext) => {
-	const emailId = c.req.param("emailId")!;
-	const attachmentId = c.req.param("attachmentId")!;
-	const attachment = await c.var.mailboxStub.getAttachment(attachmentId);
-	if (!attachment || attachment.email_id !== emailId) return c.json({ error: "Attachment not found" }, 404);
-	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
-	if (!obj) return c.json({ error: "Attachment file not found in R2" }, 404);
-	const buf = new Uint8Array(await obj.arrayBuffer());
-	const toHex = (slice: Uint8Array) =>
-		Array.from(slice).map((b) => b.toString(16).padStart(2, "0")).join(" ");
-	const toAscii = (slice: Uint8Array) =>
-		Array.from(slice).map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".")).join("");
-	return c.json({
-		filename: attachment.filename,
-		mimetype: attachment.mimetype,
-		do_size: attachment.size,
-		r2_size: buf.byteLength,
-		head_hex: toHex(buf.slice(0, 32)),
-		head_ascii: toAscii(buf.slice(0, 32)),
-		tail_hex: toHex(buf.slice(-16)),
-		tail_ascii: toAscii(buf.slice(-16)),
-	});
 });
 
 // -- Receive inbound email ------------------------------------------

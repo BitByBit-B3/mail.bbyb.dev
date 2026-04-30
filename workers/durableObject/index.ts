@@ -587,28 +587,24 @@ export class MailboxDO extends DurableObject<Env> {
 		return emailAttachments;
 	}
 
-	async listAllAttachments() {
-		return this.db
+	/**
+	 * Wipe the mailbox: returns every attachment R2 key for the caller to delete,
+	 * then drops all SQLite storage for this mailbox DO.
+	 */
+	async wipeMailbox(): Promise<{ attachmentKeys: string[] }> {
+		const rows = this.db
 			.select({
-				id: schema.attachments.id,
 				email_id: schema.attachments.email_id,
+				id: schema.attachments.id,
 				filename: schema.attachments.filename,
-				mimetype: schema.attachments.mimetype,
-				size: schema.attachments.size,
 			})
 			.from(schema.attachments)
-			.innerJoin(schema.emails, eq(schema.attachments.email_id, schema.emails.id))
-			.orderBy(desc(schema.emails.date))
-			.limit(30)
 			.all();
-	}
-
-	async updateAttachmentSize(id: string, size: number) {
-		this.db
-			.update(schema.attachments)
-			.set({ size })
-			.where(eq(schema.attachments.id, id))
-			.run();
+		const attachmentKeys = rows.map(
+			(row) => `attachments/${row.email_id}/${row.id}/${row.filename}`,
+		);
+		await this.ctx.storage.deleteAll();
+		return { attachmentKeys };
 	}
 
 	async getAttachment(id: string) {
