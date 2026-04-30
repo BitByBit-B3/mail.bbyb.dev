@@ -603,6 +603,14 @@ export class MailboxDO extends DurableObject<Env> {
 			.all();
 	}
 
+	async updateAttachmentSize(id: string, size: number) {
+		this.db
+			.update(schema.attachments)
+			.set({ size })
+			.where(eq(schema.attachments.id, id))
+			.run();
+	}
+
 	async getAttachment(id: string) {
 		return (
 			this.db

@@ -483,6 +483,81 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	return new Response(bytes, { headers });
 });
 
+// Repair: fix attachments that were stored as base64-text instead of binary.
+// Idempotent — only rewrites if the head looks like base64-encoded text and
+// the decoded result starts with a known magic number.
+app.post("/api/v1/mailboxes/:mailboxId/_debug/repair-attachments", async (c: AppContext) => {
+	const stub = c.var.mailboxStub as unknown as {
+		listAllAttachments: () => Promise<Array<{ id: string; email_id: string; filename: string; mimetype: string; size: number }>>;
+		updateAttachmentSize: (id: string, size: number) => Promise<void>;
+	};
+	const rows = await stub.listAllAttachments();
+	const results: Array<Record<string, unknown>> = [];
+
+	const knownMagics: Array<{ name: string; bytes: number[] }> = [
+		{ name: "PDF", bytes: [0x25, 0x50, 0x44, 0x46] },               // %PDF
+		{ name: "PNG", bytes: [0x89, 0x50, 0x4e, 0x47] },               // .PNG
+		{ name: "JPEG", bytes: [0xff, 0xd8, 0xff] },                    // JPEG SOI
+		{ name: "GIF", bytes: [0x47, 0x49, 0x46, 0x38] },               // GIF8
+		{ name: "ZIP", bytes: [0x50, 0x4b, 0x03, 0x04] },               // PK..  (also docx/xlsx/pptx/zip)
+		{ name: "GZIP", bytes: [0x1f, 0x8b, 0x08] },                    // gzip
+		{ name: "DOC_OLE", bytes: [0xd0, 0xcf, 0x11, 0xe0] },           // MS Office legacy
+	];
+	const looksValidMagic = (bytes: Uint8Array) =>
+		knownMagics.some((m) => m.bytes.every((b, i) => bytes[i] === b));
+
+	for (const row of rows) {
+		const key = `attachments/${row.email_id}/${row.id}/${row.filename}`;
+		const obj = await c.env.BUCKET.get(key);
+		if (!obj) {
+			results.push({ id: row.id, filename: row.filename, action: "missing" });
+			continue;
+		}
+		const buf = new Uint8Array(await obj.arrayBuffer());
+		if (looksValidMagic(buf)) {
+			results.push({ id: row.id, filename: row.filename, action: "skip-already-binary" });
+			continue;
+		}
+		// If every byte in the head is a valid base64 character, the body is base64 text.
+		const head = buf.slice(0, Math.min(64, buf.byteLength));
+		const looksBase64 = head.every(
+			(b) =>
+				(b >= 0x41 && b <= 0x5a) || // A-Z
+				(b >= 0x61 && b <= 0x7a) || // a-z
+				(b >= 0x30 && b <= 0x39) || // 0-9
+				b === 0x2b || b === 0x2f || b === 0x3d || // + / =
+				b === 0x0a || b === 0x0d || b === 0x09 || b === 0x20, // whitespace
+		);
+		if (!looksBase64) {
+			results.push({ id: row.id, filename: row.filename, action: "skip-unknown-format", head_hex: Array.from(head.slice(0, 16)).map((b) => b.toString(16)).join(" ") });
+			continue;
+		}
+		try {
+			const text = new TextDecoder("ascii").decode(buf).replace(/\s/g, "");
+			const bin = atob(text);
+			const decoded = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+			if (!looksValidMagic(decoded)) {
+				results.push({ id: row.id, filename: row.filename, action: "skip-decoded-still-not-magic", decoded_head_hex: Array.from(decoded.slice(0, 16)).map((b) => b.toString(16)).join(" ") });
+				continue;
+			}
+			await c.env.BUCKET.put(key, decoded, {
+				httpMetadata: { contentType: row.mimetype || "application/octet-stream" },
+			});
+			await stub.updateAttachmentSize(row.id, decoded.byteLength);
+			results.push({
+				id: row.id,
+				filename: row.filename,
+				action: "repaired",
+				old_size: row.size,
+				new_size: decoded.byteLength,
+			});
+		} catch (e) {
+			results.push({ id: row.id, filename: row.filename, action: "error", message: (e as Error).message });
+		}
+	}
+	return c.json({ count: results.length, results });
+});
+
 // Diagnostic: list every attachment in the mailbox with R2 head bytes so we can
 // tell at a glance whether stored bytes look like proper binary or base64 text.
 app.get("/api/v1/mailboxes/:mailboxId/_debug/attachments", async (c: AppContext) => {
@@ -567,7 +642,9 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 
 async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
-	const parsedEmail = await new PostalMime().parse(rawEmail);
+	// Force base64 mode so attachment.content is always a base64 string —
+	// removes the "is it ArrayBuffer / Uint8Array / string?" guessing game.
+	const parsedEmail = await new PostalMime({ attachmentEncoding: "base64" }).parse(rawEmail);
 
 	const allowedAddresses = ((env.EMAIL_ADDRESSES ?? []) as string[]).map((a) => a.toLowerCase());
 	const envelopeRecipient = event.to.trim().toLowerCase();
@@ -596,42 +673,11 @@ async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: Execu
 		for (const att of parsedEmail.attachments) {
 			const attId = crypto.randomUUID();
 			const filename = (att.filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
-			// Normalize content to bytes — PostalMime may return ArrayBuffer, typed array, or string
-			const raw: unknown = att.content;
-			let bytes: Uint8Array;
-			let inputKind: string;
-			if (raw instanceof ArrayBuffer) {
-				bytes = new Uint8Array(raw);
-				inputKind = "ArrayBuffer";
-			} else if (ArrayBuffer.isView(raw)) {
-				bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
-				inputKind = (raw as { constructor: { name: string } }).constructor?.name || "TypedArray";
-			} else if (typeof raw === "string") {
-				// PostalMime should not hand us a string in arraybuffer mode, but if it
-				// does (e.g. base64 string for some content types), we need to decode it,
-				// not utf-8 encode it. Detect base64 vs. plain text.
-				const looksBase64 = /^[A-Za-z0-9+/=\r\n\s]+$/.test(raw) && raw.length > 0 && raw.length % 4 === 0;
-				if (looksBase64) {
-					try {
-						const bin = atob(raw.replace(/\s/g, ""));
-						bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-						inputKind = "base64-string";
-					} catch {
-						bytes = new TextEncoder().encode(raw);
-						inputKind = "string-fallback";
-					}
-				} else {
-					bytes = new TextEncoder().encode(raw);
-					inputKind = "utf8-string";
-				}
-			} else {
-				bytes = new TextEncoder().encode(String(raw ?? ""));
-				inputKind = "unknown";
-			}
+			// PostalMime is in base64 mode — content is always a base64 string. Decode once.
+			const b64 = (typeof att.content === "string" ? att.content : "").replace(/\s/g, "");
+			const bin = atob(b64);
+			const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
 			const mimetype = att.mimeType || "application/octet-stream";
-			// Diagnostic: log first 4 bytes as hex to verify magic numbers (e.g. PDF = 25 50 44 46)
-			const head = Array.from(bytes.slice(0, 4)).map((b) => b.toString(16).padStart(2, "0")).join("");
-			console.log(`[inbound-attachment] file=${filename} mime=${mimetype} kind=${inputKind} size=${bytes.byteLength} head=${head}`);
 			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, bytes, {
 				httpMetadata: { contentType: mimetype },
 			});
