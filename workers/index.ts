@@ -483,6 +483,32 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	return new Response(bytes, { headers });
 });
 
+// Diagnostic: dump head/tail magic bytes for an attachment so we can tell
+// whether stored bytes are corrupt vs. just a serving problem.
+app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId/_debug", async (c: AppContext) => {
+	const emailId = c.req.param("emailId")!;
+	const attachmentId = c.req.param("attachmentId")!;
+	const attachment = await c.var.mailboxStub.getAttachment(attachmentId);
+	if (!attachment || attachment.email_id !== emailId) return c.json({ error: "Attachment not found" }, 404);
+	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
+	if (!obj) return c.json({ error: "Attachment file not found in R2" }, 404);
+	const buf = new Uint8Array(await obj.arrayBuffer());
+	const toHex = (slice: Uint8Array) =>
+		Array.from(slice).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+	const toAscii = (slice: Uint8Array) =>
+		Array.from(slice).map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".")).join("");
+	return c.json({
+		filename: attachment.filename,
+		mimetype: attachment.mimetype,
+		do_size: attachment.size,
+		r2_size: buf.byteLength,
+		head_hex: toHex(buf.slice(0, 32)),
+		head_ascii: toAscii(buf.slice(0, 32)),
+		tail_hex: toHex(buf.slice(-16)),
+		tail_ascii: toAscii(buf.slice(-16)),
+	});
+});
+
 // -- Receive inbound email ------------------------------------------
 
 const MAX_EMAIL_SIZE = 25 * 1024 * 1024;
