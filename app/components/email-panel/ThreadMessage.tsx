@@ -34,10 +34,11 @@ interface ThreadMessageProps {
 	onEditDraft?: () => void;
 	onDeleteDraft?: () => void;
 	onViewSource?: () => void;
-	onPreviewImage?: (
+	onPreviewAttachment?: (
 		previewUrl: string,
 		filename: string,
 		downloadUrl: string,
+		mimetype: string,
 	) => void;
 }
 
@@ -70,7 +71,7 @@ export default function ThreadMessage({
 	onEditDraft,
 	onDeleteDraft,
 	onViewSource,
-	onPreviewImage,
+	onPreviewAttachment,
 }: ThreadMessageProps) {
 	const isSelf = email.sender === mailboxEmail;
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
@@ -215,7 +216,7 @@ export default function ThreadMessage({
 					mailboxId={mailboxId}
 					emailId={email.id}
 					attachments={email.attachments}
-					onPreviewImage={onPreviewImage}
+					onPreviewAttachment={onPreviewAttachment}
 					className="mt-3 md:ml-[42px]"
 				/>
 			</div>

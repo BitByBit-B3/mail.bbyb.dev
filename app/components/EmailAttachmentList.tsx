@@ -2,18 +2,27 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { PaperclipIcon, FileIcon, ImageIcon } from "@phosphor-icons/react";
-import { formatBytes, getAttachmentUrl, getNonInlineAttachments } from "~/lib/utils";
+import { PaperclipIcon, FileIcon, ImageIcon, FilePdfIcon, FileTextIcon } from "@phosphor-icons/react";
+import {
+	formatBytes,
+	getAttachmentUrl,
+	getNonInlineAttachments,
+	isImageMime,
+	isPdfMime,
+	isPreviewableMime,
+	isTextMime,
+} from "~/lib/utils";
 import type { Attachment } from "~/types";
 
 interface EmailAttachmentListProps {
 	mailboxId?: string;
 	emailId: string;
 	attachments?: Attachment[];
-	onPreviewImage?: (
+	onPreviewAttachment?: (
 		previewUrl: string,
 		filename: string,
 		downloadUrl: string,
+		mimetype: string,
 	) => void;
 	className?: string;
 	showHeading?: boolean;
@@ -23,7 +32,7 @@ export default function EmailAttachmentList({
 	mailboxId,
 	emailId,
 	attachments,
-	onPreviewImage,
+	onPreviewAttachment,
 	className,
 	showHeading = false,
 }: EmailAttachmentListProps) {
@@ -56,23 +65,32 @@ export default function EmailAttachmentList({
 						attachment.id,
 						{ disposition: "inline" },
 					);
-					const isImage = attachment.mimetype?.startsWith("image/");
+					const mime = attachment.mimetype || "";
+					const Icon = isImageMime(mime)
+						? ImageIcon
+						: isPdfMime(mime)
+							? FilePdfIcon
+							: isTextMime(mime)
+								? FileTextIcon
+								: FileIcon;
+					const previewable = isPreviewableMime(mime);
 
-					if (isImage && onPreviewImage) {
+					if (previewable && onPreviewAttachment) {
 						return (
 							<button
 								key={attachment.id}
 								type="button"
 								onClick={() =>
-									onPreviewImage(
+									onPreviewAttachment(
 										previewUrl,
 										attachment.filename,
 										downloadUrl,
+										mime,
 									)
 								}
 								className="flex items-center gap-2 rounded-md border border-kumo-line px-3 py-2 transition-colors hover:bg-kumo-tint text-sm text-left"
 							>
-								<ImageIcon size={16} className="text-kumo-subtle shrink-0" />
+								<Icon size={16} className="text-kumo-subtle shrink-0" />
 								<span className="text-kumo-default font-medium truncate max-w-[140px]">
 									{attachment.filename}
 								</span>
@@ -89,7 +107,7 @@ export default function EmailAttachmentList({
 							rel="noopener noreferrer"
 							className="flex items-center gap-2 rounded-md border border-kumo-line px-3 py-2 no-underline transition-colors hover:bg-kumo-tint text-sm"
 						>
-							<FileIcon size={16} className="text-kumo-subtle shrink-0" />
+							<Icon size={16} className="text-kumo-subtle shrink-0" />
 							<span className="text-kumo-default font-medium truncate max-w-[140px]">
 								{attachment.filename}
 							</span>

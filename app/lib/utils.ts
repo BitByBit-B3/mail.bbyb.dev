@@ -228,6 +228,31 @@ export function getAttachmentUrl(
 	return `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${attachmentId}${query}`;
 }
 
+export function isImageMime(mime: string): boolean {
+	return !!mime && mime.toLowerCase().startsWith("image/");
+}
+
+export function isPdfMime(mime: string): boolean {
+	return !!mime && mime.toLowerCase() === "application/pdf";
+}
+
+export function isTextMime(mime: string): boolean {
+	if (!mime) return false;
+	const m = mime.toLowerCase();
+	return (
+		m.startsWith("text/") ||
+		m === "application/json" ||
+		m === "application/xml" ||
+		m === "application/javascript" ||
+		m === "application/x-yaml" ||
+		m === "application/x-sh"
+	);
+}
+
+export function isPreviewableMime(mime: string): boolean {
+	return isImageMime(mime) || isPdfMime(mime) || isTextMime(mime);
+}
+
 export function downloadFile(url: string, filename: string) {
 	const link = document.createElement("a");
 	link.href = url;

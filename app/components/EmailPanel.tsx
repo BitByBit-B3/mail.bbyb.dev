@@ -50,10 +50,11 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const [isSending, setIsSending] = useState(false);
 	const [sourceViewEmail, setSourceViewEmail] = useState<Email | null>(null);
 	const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
-	const [previewImage, setPreviewImage] = useState<{
+	const [previewAttachment, setPreviewAttachment] = useState<{
 		url: string;
 		filename: string;
 		downloadUrl: string;
+		mimetype: string;
 	} | null>(null);
 	const isDraftFolder = folder === Folders.DRAFT;
 
@@ -208,8 +209,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								onEditDraft={isDraft ? () => handleEditDraft(msg) : undefined}
 								onDeleteDraft={isDraft ? () => handleDeleteDraft(msg) : undefined}
 								onViewSource={() => setSourceViewEmail(msg)}
-								onPreviewImage={(url, filename, downloadUrl) =>
-									setPreviewImage({ url, filename, downloadUrl })
+								onPreviewAttachment={(url, filename, downloadUrl, mimetype) =>
+									setPreviewAttachment({ url, filename, downloadUrl, mimetype })
 								}
 							/>
 						);
@@ -218,8 +219,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					<SingleMessageView
 						email={email}
 						mailboxId={mailboxId}
-						onPreviewImage={(url, filename, downloadUrl) =>
-							setPreviewImage({ url, filename, downloadUrl })
+						onPreviewAttachment={(url, filename, downloadUrl, mimetype) =>
+							setPreviewAttachment({ url, filename, downloadUrl, mimetype })
 						}
 					/>
 				)}
@@ -227,9 +228,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 			<EmailPanelDialogs
 				sourceViewEmail={sourceViewEmail}
-				previewImage={previewImage}
+				previewAttachment={previewAttachment}
 				onCloseSource={() => setSourceViewEmail(null)}
-				onClosePreview={() => setPreviewImage(null)}
+				onClosePreview={() => setPreviewAttachment(null)}
 			/>
 		</div>
 	);

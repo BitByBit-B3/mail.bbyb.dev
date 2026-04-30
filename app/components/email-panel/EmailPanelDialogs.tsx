@@ -3,18 +3,20 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Dialog } from "@cloudflare/kumo";
-import { downloadFile } from "~/lib/utils";
+import { useEffect, useState } from "react";
+import { downloadFile, isImageMime, isPdfMime, isTextMime } from "~/lib/utils";
 import type { Email } from "~/types";
 
-interface PreviewImage {
+interface PreviewAttachment {
 	url: string;
 	filename: string;
 	downloadUrl: string;
+	mimetype: string;
 }
 
 interface EmailPanelDialogsProps {
 	sourceViewEmail: Email | null;
-	previewImage: PreviewImage | null;
+	previewAttachment: PreviewAttachment | null;
 	onCloseSource: () => void;
 	onClosePreview: () => void;
 }
@@ -56,13 +58,54 @@ function getSourceHeaders(msg: Email): { key: string; value: string }[] {
 	return headers;
 }
 
+function TextPreview({ url }: { url: string }) {
+	const [text, setText] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		setText(null);
+		setError(null);
+		fetch(url)
+			.then(async (res) => {
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				// Cap at 1 MB to avoid blowing out the dialog with huge logs
+				const blob = await res.blob();
+				const slice = blob.size > 1024 * 1024 ? blob.slice(0, 1024 * 1024) : blob;
+				return slice.text();
+			})
+			.then((t) => { if (!cancelled) setText(t); })
+			.catch((e: unknown) => {
+				if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+			});
+		return () => { cancelled = true; };
+	}, [url]);
+
+	if (error) return <p className="text-sm text-kumo-danger p-4">Failed to load: {error}</p>;
+	if (text === null) return <p className="text-sm text-kumo-subtle p-4">Loading…</p>;
+	return (
+		<pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words text-xs font-mono bg-kumo-tint/30 rounded-lg p-4">
+			{text}
+		</pre>
+	);
+}
+
 export default function EmailPanelDialogs({
 	sourceViewEmail,
-	previewImage,
+	previewAttachment,
 	onCloseSource,
 	onClosePreview,
 }: EmailPanelDialogsProps) {
 	const sourceHeaders = sourceViewEmail ? getSourceHeaders(sourceViewEmail) : [];
+	const mime = previewAttachment?.mimetype ?? "";
+	const previewKind: "image" | "pdf" | "text" | "none" = previewAttachment
+		? isImageMime(mime)
+			? "image"
+			: isPdfMime(mime)
+				? "pdf"
+				: isTextMime(mime)
+					? "text"
+					: "none"
+		: "none";
 
 	return (
 		<>
@@ -118,20 +161,41 @@ export default function EmailPanelDialogs({
 			</Dialog.Root>
 
 			<Dialog.Root
-				open={previewImage !== null}
+				open={previewAttachment !== null}
 				onOpenChange={(open) => {
 					if (!open) onClosePreview();
 				}}
 			>
 				<Dialog size="lg">
-					<Dialog.Title>{previewImage?.filename}</Dialog.Title>
-					{previewImage && (
+					<Dialog.Title>{previewAttachment?.filename}</Dialog.Title>
+					{previewAttachment && previewKind === "image" && (
 						<div className="mt-4 flex flex-col items-center justify-center bg-kumo-tint/30 rounded-lg p-4 min-h-[200px]">
 							<img
-								src={previewImage.url}
-								alt={previewImage.filename}
+								src={previewAttachment.url}
+								alt={previewAttachment.filename}
 								className="max-w-full max-h-[70vh] object-contain rounded shadow-sm"
 							/>
+						</div>
+					)}
+					{previewAttachment && previewKind === "pdf" && (
+						<div className="mt-4 bg-kumo-tint/30 rounded-lg overflow-hidden">
+							<iframe
+								src={previewAttachment.url}
+								title={previewAttachment.filename}
+								className="w-full h-[70vh] border-0"
+							/>
+						</div>
+					)}
+					{previewAttachment && previewKind === "text" && (
+						<div className="mt-4">
+							<TextPreview url={previewAttachment.url} />
+						</div>
+					)}
+					{previewAttachment && previewKind === "none" && (
+						<div className="mt-4 flex flex-col items-center justify-center bg-kumo-tint/30 rounded-lg p-8 min-h-[200px]">
+							<p className="text-sm text-kumo-subtle">
+								Preview not available for {previewAttachment.mimetype || "this file type"}.
+							</p>
 						</div>
 					)}
 					<div className="flex justify-between items-center mt-4">
@@ -139,10 +203,10 @@ export default function EmailPanelDialogs({
 							variant="secondary"
 							size="sm"
 							onClick={() => {
-								if (previewImage) {
+								if (previewAttachment) {
 									downloadFile(
-										previewImage.downloadUrl,
-										previewImage.filename,
+										previewAttachment.downloadUrl,
+										previewAttachment.filename,
 									);
 								}
 							}}

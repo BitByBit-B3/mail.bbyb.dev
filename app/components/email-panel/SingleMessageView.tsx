@@ -10,17 +10,18 @@ import type { Email } from "~/types";
 interface SingleMessageViewProps {
 	email: Email;
 	mailboxId?: string;
-	onPreviewImage: (
+	onPreviewAttachment: (
 		previewUrl: string,
 		filename: string,
 		downloadUrl: string,
+		mimetype: string,
 	) => void;
 }
 
 export default function SingleMessageView({
 	email,
 	mailboxId,
-	onPreviewImage,
+	onPreviewAttachment,
 }: SingleMessageViewProps) {
 	return (
 		<div className="flex flex-col h-full">
@@ -58,7 +59,7 @@ export default function SingleMessageView({
 				mailboxId={mailboxId}
 				emailId={email.id}
 				attachments={email.attachments}
-				onPreviewImage={onPreviewImage}
+				onPreviewAttachment={onPreviewAttachment}
 				className="px-4 py-3 border-t border-kumo-line shrink-0 md:px-6"
 				showHeading
 			/>
