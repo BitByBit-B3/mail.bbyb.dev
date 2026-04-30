@@ -500,7 +500,9 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 		result.set(value, bytesRead);
 		bytesRead += value.length;
 	}
-	return result;
+	// Slice to actual bytes — trailing zero-pad confuses MIME boundary scanning
+	// and can truncate attachments mid-stream.
+	return bytesRead === streamSize ? result : result.subarray(0, bytesRead);
 }
 
 async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
@@ -537,14 +539,39 @@ async function receiveEmail(event: ForwardableEmailMessage, env: Env, ctx: Execu
 			// Normalize content to bytes — PostalMime may return ArrayBuffer, typed array, or string
 			const raw: unknown = att.content;
 			let bytes: Uint8Array;
+			let inputKind: string;
 			if (raw instanceof ArrayBuffer) {
 				bytes = new Uint8Array(raw);
+				inputKind = "ArrayBuffer";
 			} else if (ArrayBuffer.isView(raw)) {
 				bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+				inputKind = (raw as { constructor: { name: string } }).constructor?.name || "TypedArray";
+			} else if (typeof raw === "string") {
+				// PostalMime should not hand us a string in arraybuffer mode, but if it
+				// does (e.g. base64 string for some content types), we need to decode it,
+				// not utf-8 encode it. Detect base64 vs. plain text.
+				const looksBase64 = /^[A-Za-z0-9+/=\r\n\s]+$/.test(raw) && raw.length > 0 && raw.length % 4 === 0;
+				if (looksBase64) {
+					try {
+						const bin = atob(raw.replace(/\s/g, ""));
+						bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+						inputKind = "base64-string";
+					} catch {
+						bytes = new TextEncoder().encode(raw);
+						inputKind = "string-fallback";
+					}
+				} else {
+					bytes = new TextEncoder().encode(raw);
+					inputKind = "utf8-string";
+				}
 			} else {
 				bytes = new TextEncoder().encode(String(raw ?? ""));
+				inputKind = "unknown";
 			}
 			const mimetype = att.mimeType || "application/octet-stream";
+			// Diagnostic: log first 4 bytes as hex to verify magic numbers (e.g. PDF = 25 50 44 46)
+			const head = Array.from(bytes.slice(0, 4)).map((b) => b.toString(16).padStart(2, "0")).join("");
+			console.log(`[inbound-attachment] file=${filename} mime=${mimetype} kind=${inputKind} size=${bytes.byteLength} head=${head}`);
 			await env.BUCKET.put(`attachments/${messageId}/${attId}/${filename}`, bytes, {
 				httpMetadata: { contentType: mimetype },
 			});

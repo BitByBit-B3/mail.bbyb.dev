@@ -157,7 +157,8 @@ function buildInitialComposeFields(
 			...EMPTY_FIELDS,
 			subject: getPrefixedSubject(original.subject, "Fwd"),
 			body: buildForwardBody(original, sigBlock),
-			attachments: buildStoredComposeAttachments(original),
+			// Include inline attachments so cid: references in the forwarded body resolve.
+			attachments: buildStoredComposeAttachments(original, { includeInline: true }),
 		};
 	}
 
