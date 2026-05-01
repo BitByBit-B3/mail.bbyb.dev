@@ -110,9 +110,11 @@ function buildReplyAllFields(
 function buildInitialComposeFields(
 	composeOptions: ReturnType<typeof useUIStore.getState>["composeOptions"],
 	mailboxEmail: string | undefined,
-	sigBlock: string,
 ): ComposeFormFields {
 	const { draftEmail: draft, originalEmail: original, mode } = composeOptions;
+
+	// Signatures are NOT injected into the editor — they're appended at
+	// send/save time. Editor stays clean for what the user is actually writing.
 
 	if (draft) {
 		return {
@@ -127,10 +129,7 @@ function buildInitialComposeFields(
 	}
 
 	if (!original) {
-		return {
-			...EMPTY_FIELDS,
-			body: sigBlock ? `<p><br></p>${sigBlock}` : "",
-		};
+		return { ...EMPTY_FIELDS };
 	}
 
 	if (mode === "reply") {
@@ -138,7 +137,7 @@ function buildInitialComposeFields(
 			...EMPTY_FIELDS,
 			to: original.sender,
 			subject: getPrefixedSubject(original.subject, "Re"),
-			body: `<p><br></p>${sigBlock ? `${sigBlock}<br>` : ""}${buildQuotedReplyBlock(original.date, original.sender, original.body || "")}`,
+			body: `<p><br></p>${buildQuotedReplyBlock(original.date, original.sender, original.body || "")}`,
 		};
 	}
 
@@ -148,7 +147,7 @@ function buildInitialComposeFields(
 			...EMPTY_FIELDS,
 			...recipients,
 			subject: getPrefixedSubject(original.subject, "Re"),
-			body: `<p><br></p>${sigBlock ? `${sigBlock}<br>` : ""}${buildQuotedReplyBlock(original.date, original.sender, original.body || "")}`,
+			body: `<p><br></p>${buildQuotedReplyBlock(original.date, original.sender, original.body || "")}`,
 		};
 	}
 
@@ -156,16 +155,18 @@ function buildInitialComposeFields(
 		return {
 			...EMPTY_FIELDS,
 			subject: getPrefixedSubject(original.subject, "Fwd"),
-			body: buildForwardBody(original, sigBlock),
-			// Include inline attachments so cid: references in the forwarded body resolve.
+			body: buildForwardBody(original, ""),
 			attachments: buildStoredComposeAttachments(original, { includeInline: true }),
 		};
 	}
 
-	return {
-		...EMPTY_FIELDS,
-		body: sigBlock ? `<p><br></p>${sigBlock}` : "",
-	};
+	return { ...EMPTY_FIELDS };
+}
+
+function appendSignature(body: string, sigBlock: string): string {
+	if (!sigBlock) return body;
+	const sep = body && body.trim() ? "<br>" : "";
+	return `${body}${sep}${sigBlock}`;
 }
 
 export function useComposeForm(mailboxId?: string, _folder?: string) {
@@ -209,7 +210,6 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const initialFields = buildInitialComposeFields(
 			composeOptions,
 			currentMailbox?.email,
-			sigBlock,
 		);
 		setError(null);
 		setTo(initialFields.to);
@@ -220,7 +220,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setBody(initialFields.body);
 		setAttachments(initialFields.attachments);
 		setDraftId(composeOptions.draftEmail?.id || undefined);
-	}, [composeOptions, currentMailbox?.email, sigBlock]);
+	}, [composeOptions, currentMailbox?.email]);
 
 	const addAttachments = async (files: FileList | null) => {
 		if (!files || files.length === 0) return;
@@ -270,12 +270,13 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setIsSavingDraft(true);
 		setError(null);
 		try {
+			const finalBody = appendSignature(body, sigBlock);
 			const savedDraft = await saveDraftMutation.mutateAsync({ mailboxId, draft: {
 				to,
 				cc: cc || undefined,
 				bcc: bcc || undefined,
 				subject,
-				body,
+				body: finalBody,
 				attachments: serializeComposeAttachments(attachments),
 				in_reply_to: composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to || undefined,
 				thread_id: composeOptions.originalEmail?.thread_id || composeOptions.draftEmail?.thread_id || undefined,
@@ -303,14 +304,15 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
 		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
 		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
+		const finalBody = appendSignature(body, sigBlock);
 		const emailData = {
 			to: toEmailListValue(toRecipients),
 			cc: toEmailListValue(ccRecipients),
 			bcc: toEmailListValue(bccRecipients),
 			from,
 			subject,
-			html: body,
-			text: htmlToPlainText(body),
+			html: finalBody,
+			text: htmlToPlainText(finalBody),
 			attachments: serializeComposeAttachments(attachments),
 		};
 		const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
@@ -326,5 +328,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, attachments, isAddingAttachments, addAttachments, removeAttachment, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, attachments, isAddingAttachments, addAttachments, removeAttachment, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel, sigBlock };
 }

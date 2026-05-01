@@ -49,6 +49,7 @@ export default function ComposePanel() {
 		handleSend,
 		closeCompose,
 		closePanel,
+		sigBlock,
 	} = useComposeForm(mailboxId, folder);
 
 	const editorRef = useRef<Editor | null>(null);
@@ -300,6 +301,22 @@ export default function ComposePanel() {
 							editorRef={editorRef}
 						/>
 					</div>
+
+					{/* Signature preview — appended on send, never edited inline */}
+					{sigBlock && (
+						<div className="mt-4">
+							<div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-kumo-subtle font-semibold mb-2">
+								<span>Signature</span>
+								<span className="h-px flex-1 bg-kumo-line" />
+								<a href="/settings" className="text-kumo-link hover:underline normal-case tracking-normal text-xs font-medium">edit</a>
+							</div>
+							<div
+								className="rounded-md border border-kumo-line bg-white p-4 overflow-hidden text-[#0f172a]"
+								style={{ colorScheme: "light" }}
+								dangerouslySetInnerHTML={{ __html: sigBlock }}
+							/>
+						</div>
+					)}
 				</div>
 
 				{/* Footer */}

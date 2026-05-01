@@ -15,6 +15,8 @@ const FONT =
   "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif";
 const NAME_FONT =
   "-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif";
+const BRAND_FONT =
+  "'Unbounded','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 
 const C = {
   ink: "#0b1220",
@@ -245,11 +247,12 @@ export function EmailSignature(fields: SignatureFields): React.ReactElement {
             >
               <span
                 style={{
+                  fontFamily: BRAND_FONT,
                   color: C.ink,
                   fontWeight: 900,
-                  letterSpacing: "-0.02em",
-                  fontSize: 13,
-                  verticalAlign: "-1px",
+                  letterSpacing: "-0.04em",
+                  fontSize: 16,
+                  verticalAlign: "-2px",
                 }}
               >
                 B3
@@ -258,8 +261,6 @@ export function EmailSignature(fields: SignatureFields): React.ReactElement {
               <a href="https://bbyb.dev" style={{ color: C.muted, textDecoration: "none", fontWeight: 700 }}>
                 BitByBit
               </a>
-              <Dot />
-              <span style={{ color: C.subtle }}>Internal Mail</span>
             </div>
           </td>
         </tr>
