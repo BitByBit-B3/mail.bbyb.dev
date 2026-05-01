@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { processOutboxBatch, type OutboxJob } from "./lib/outbound-queue";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -199,5 +200,8 @@ export default {
 			console.error("Failed to process incoming email:", (e as Error).message, (e as Error).stack);
 			throw e;
 		}
+	},
+	async queue(batch: MessageBatch<OutboxJob>, env: Env) {
+		await processOutboxBatch(env, batch);
 	},
 };

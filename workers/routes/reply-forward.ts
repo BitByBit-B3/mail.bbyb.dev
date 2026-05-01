@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { Context } from "hono";
-import { sendEmail } from "../email-sender";
+import { enqueueSend } from "../lib/outbound-queue";
 import {
 	materializeComposeAttachments,
 	storeMaterializedAttachments,
@@ -107,23 +107,19 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: toSendEmailAttachments(materializedAttachments),
-			headers: buildThreadingHeaders(originalMsgId, references),
-		}).catch((e) => {
-			console.error("Deferred reply delivery failed:", (e as Error).message);
-		}),
-	);
+	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+		to,
+		cc,
+		bcc,
+		from,
+		subject,
+		html,
+		text,
+		attachments: toSendEmailAttachments(materializedAttachments),
+		headers: buildThreadingHeaders(originalMsgId, references),
+	});
 
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, jobId, status: "queued" }, 202);
 }
 
 export async function handleForwardEmail(c: AppContext) {
@@ -196,20 +192,16 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: toSendEmailAttachments(materializedAttachments),
-		}).catch((e) => {
-			console.error("Deferred forward delivery failed:", (e as Error).message);
-		}),
-	);
+	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+		to,
+		cc,
+		bcc,
+		from,
+		subject,
+		html,
+		text,
+		attachments: toSendEmailAttachments(materializedAttachments),
+	});
 
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, jobId, status: "queued" }, 202);
 }

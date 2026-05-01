@@ -18,14 +18,15 @@ const NAME_FONT =
 const BRAND_FONT =
   "'Unbounded','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 
+// Pure monochrome — no color, only black/white/grays.
 const C = {
-  ink: "#0b1220",
-  text: "#0f172a",
-  muted: "#475569",
-  subtle: "#94a3b8",
-  soft: "#cbd5e1",
-  rule: "#e2e8f0",
-  accent: "#2563eb",
+  ink: "#000000",
+  text: "#111111",
+  muted: "#4a4a4a",
+  subtle: "#888888",
+  soft: "#cccccc",
+  rule: "#e5e5e5",
+  accent: "#000000",
 };
 
 interface ContactItem {

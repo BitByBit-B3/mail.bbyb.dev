@@ -7,6 +7,7 @@ import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
+import { enqueueSend } from "./lib/outbound-queue";
 import {
 	deleteAttachmentBlobs,
 	materializeComposeAttachments,
@@ -335,14 +336,12 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		]),
 	}, attachmentData);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to, cc, bcc, from, subject, html, text,
-			attachments: toSendEmailAttachments(materializedAttachments),
-			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
-	);
-	return c.json({ id: messageId, status: "sent" }, 202);
+	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+		to, cc, bcc, from, subject, html, text,
+		attachments: toSendEmailAttachments(materializedAttachments),
+		...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
+	});
+	return c.json({ id: messageId, jobId, status: "queued" }, 202);
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
