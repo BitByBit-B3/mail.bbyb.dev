@@ -82,6 +82,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta charSet="UTF-8" />
 				<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f172a'/%3E%3Crect x='0' y='0' width='4' height='32' rx='2' fill='%233b82f6'/%3E%3Crect x='7' y='10' width='18' height='13' rx='2' fill='%23ffffff'/%3E%3Cpolygon points='7,10 16,18 25,10' fill='%233b82f6'/%3E%3C/svg%3E" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+				<link rel="preconnect" href="https://fonts.googleapis.com" />
+				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+				<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&display=swap" />
 				<title>B3 Internal Mail</title>
 				<Meta />
 				<Links />
