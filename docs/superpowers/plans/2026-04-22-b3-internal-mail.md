@@ -284,7 +284,7 @@ Expected: HTTP 200 or 401/403 (any response means the worker is reachable). If y
 
 1. Policy name: `B3 Team`
 2. Action: **Allow**
-3. Add rule: **Emails → `bitbybit0123@gmail.com`**
+3. Add rule: **Emails → `<admin@yourdomain.com>`**
 4. Click **Next → Add application**
 
 - [ ] **Step 4: Collect the Audience Tag and Team Domain**
@@ -320,7 +320,7 @@ When prompted, paste the full team domain URL (e.g. `https://bitbybit.cloudflare
 
 Open an incognito browser window and visit `https://mail.bbyb.dev`.
 
-Expected: Cloudflare Access login screen appears asking you to sign in with Google. Sign in with `bitbybit0123@gmail.com` — you should reach the app. Any other Google account should be denied.
+Expected: Cloudflare Access login screen appears asking you to sign in with Google. Sign in with `<admin@yourdomain.com>` — you should reach the app. Any other Google account should be denied.
 
 ---
 
@@ -379,7 +379,7 @@ Expected: the email arrives at the destination. If it bounces or fails, check th
 
 - [ ] **Step 1: Sign in**
 
-Visit `https://mail.bbyb.dev` and authenticate with `bitbybit0123@gmail.com` via Google.
+Visit `https://mail.bbyb.dev` and authenticate with `<admin@yourdomain.com>` via Google.
 
 - [ ] **Step 2: Create each mailbox**
 
