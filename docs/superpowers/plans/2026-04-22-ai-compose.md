@@ -712,5 +712,5 @@ npm run dev
 - [ ] **Step 5: Deploy**
 
 ```bash
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npm run deploy
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npm run deploy
 ```

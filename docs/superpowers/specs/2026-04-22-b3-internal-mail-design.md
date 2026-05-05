@@ -8,7 +8,7 @@
 
 ## Overview
 
-Fork and deploy `cloudflare/agentic-inbox` as **B3 Internal Mail** — a self-hosted email client running entirely on the bitbybit Cloudflare account. The app lives at `mail.bbyb.dev`, handles all `@bbyb.dev` email addresses via a catch-all routing rule, and is gated behind Cloudflare Access with Google SSO restricted to `bitbybit0123@gmail.com`.
+Fork and deploy `cloudflare/agentic-inbox` as **B3 Internal Mail** — a self-hosted email client running entirely on the bitbybit Cloudflare account. The app lives at `mail.bbyb.dev`, handles all `@bbyb.dev` email addresses via a catch-all routing rule, and is gated behind Cloudflare Access with Google SSO restricted to `<admin@yourdomain.com>`.
 
 ---
 
@@ -17,7 +17,7 @@ Fork and deploy `cloudflare/agentic-inbox` as **B3 Internal Mail** — a self-ho
 - Fully functional email client (send, receive, threads, attachments, AI agent) at `mail.bbyb.dev`
 - Any `@bbyb.dev` address can be created as a mailbox (e.g. `contact@bbyb.dev`, `team@bbyb.dev`)
 - Each mailbox is isolated — sending happens from within that mailbox's context
-- Single authorized user: `bitbybit0123@gmail.com` via Google OAuth
+- Single authorized user: `<admin@yourdomain.com>` via Google OAuth
 - Branded as "B3 Internal Mail" throughout the UI
 
 ---
@@ -34,7 +34,7 @@ Infrastructure:
 - **Email inbound** — Cloudflare Email Routing, catch-all `*@bbyb.dev` → Worker
 - **Email outbound** — Cloudflare Email Service (`send_email` binding)
 - **Attachments** — R2 bucket `b3-mail`
-- **Auth** — Cloudflare Access, Google provider, allow policy: `bitbybit0123@gmail.com`
+- **Auth** — Cloudflare Access, Google provider, allow policy: `<admin@yourdomain.com>`
 
 ---
 
@@ -79,7 +79,7 @@ Infrastructure:
 2. Create an Access Application:
    - Name: `B3 Internal Mail`
    - Domain: `mail.bbyb.dev`
-   - Policy: Allow → Email → `bitbybit0123@gmail.com`
+   - Policy: Allow → Email → `<admin@yourdomain.com>`
 3. Copy the **Audience Tag** → `wrangler secret put POLICY_AUD`
 4. Copy the **Team Domain** → `wrangler secret put TEAM_DOMAIN`
 

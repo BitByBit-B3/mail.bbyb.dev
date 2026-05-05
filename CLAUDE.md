@@ -4,8 +4,8 @@
 
 **B3** = BitByBit (three B's in the name). B3 Internal Mail is a full-stack email client built on Cloudflare infrastructure for [BitByBit](https://bbyb.dev). It is deployed at `mail.bbyb.dev` and handles all `@bbyb.dev` email addresses via Cloudflare Email Routing.
 
-**Cloudflare Account:** BitByBit (`8f0203259905d8923687286c84921e6c`)  
-**Zone:** `bbyb.dev` (Zone ID: `edbc6334a5f99b90be9a2f1c65876826`)
+**Cloudflare Account:** BitByBit  
+**Zone:** `bbyb.dev`
 
 ---
 
@@ -37,7 +37,7 @@ npm run typecheck    # Type-check (runs cf-typegen + react-router typegen + tsc)
 npm run cf-typegen   # Regenerate worker-configuration.d.ts (gitignored, auto-generated)
 
 # Deploy
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npm run deploy
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npm run deploy
 ```
 
 ---
@@ -145,9 +145,9 @@ setBody(accumulated);
 
 ## Auth
 
-In production, every request is protected by Cloudflare Access JWT middleware in `workers/app.ts`. The JWT is verified against `POLICY_AUD` and `TEAM_DOMAIN` (`bitbybit-b3.cloudflareaccess.com`). In `DEV` mode (`import.meta.env.DEV === true`), auth is skipped entirely.
+In production, every request is protected by Cloudflare Access JWT middleware in `workers/app.ts`. The JWT is verified against `POLICY_AUD` and `TEAM_DOMAIN` (your Cloudflare Access team domain). In `DEV` mode (`import.meta.env.DEV === true`), auth is skipped entirely.
 
-Access is restricted to `bitbybit0123@gmail.com` via OTP on the Cloudflare Access policy.
+Access is restricted to your authorized team members via OTP on the Cloudflare Access policy.
 
 ---
 

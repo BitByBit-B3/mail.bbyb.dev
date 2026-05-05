@@ -6,7 +6,7 @@ Code is deployed to `mail.bbyb.dev`. The steps below are manual dashboard tasks 
 
 ## 1. Cloudflare Access — OTP Login
 
-Protects `mail.bbyb.dev` so only `bitbybit0123@gmail.com` can log in via one-time PIN (no OAuth app needed).
+Protects `mail.bbyb.dev` so only authorized team members can log in via one-time PIN (no OAuth app needed).
 
 **Steps (Zero Trust dashboard):**
 1. Go to https://one.dash.cloudflare.com → your BitByBit account
@@ -18,7 +18,7 @@ Protects `mail.bbyb.dev` so only `bitbybit0123@gmail.com` can log in via one-tim
 4. Under **Identity providers** — uncheck everything except **One-time PIN**
 5. Click **Next**
 6. Policy name: `B3 Team`, Action: **Allow**
-7. Add rule: **Emails → `bitbybit0123@gmail.com`**
+7. Add rule: **Emails → `<your-email@domain.com>`**
 8. Click **Next → Save**
 9. Open the saved application → **Overview tab**
 10. Copy the **Application Audience (AUD) tag**
@@ -26,8 +26,8 @@ Protects `mail.bbyb.dev` so only `bitbybit0123@gmail.com` can log in via one-tim
 
 **Then set the secrets (run in terminal):**
 ```bash
-! CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npx wrangler secret put POLICY_AUD
-! CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npx wrangler secret put TEAM_DOMAIN
+! CLOUDFLARE_ACCOUNT_ID=<your-account-id> npx wrangler secret put POLICY_AUD
+! CLOUDFLARE_ACCOUNT_ID=<your-account-id> npx wrangler secret put TEAM_DOMAIN
 ```
 
 ---
@@ -62,7 +62,7 @@ Allows the worker to send emails from `@bbyb.dev` addresses.
 
 ## 4. Create Mailboxes (in the app)
 
-Visit `https://mail.bbyb.dev` after Access is set up, sign in with `bitbybit0123@gmail.com`, and create these mailboxes:
+Visit `https://mail.bbyb.dev` after Access is set up, sign in with your authorized email, and create these mailboxes:
 
 | # | Address | Purpose |
 |---|---|---|
@@ -79,7 +79,7 @@ Visit `https://mail.bbyb.dev` after Access is set up, sign in with `bitbybit0123
 ## 5. Smoke Test
 
 - [ ] Open `mail.bbyb.dev` in incognito → OTP login screen appears
-- [ ] Enter `bitbybit0123@gmail.com` → receive PIN → access granted
+- [ ] Enter your authorized email → receive PIN → access granted
 - [ ] Create a mailbox and send a test email to an external address
 - [ ] Send a test email to `contact@bbyb.dev` from outside → confirm it lands in the mailbox
 - [ ] Open the AI agent panel → ask "What emails do I have?" → Kimi responds
@@ -98,14 +98,14 @@ Visit `https://mail.bbyb.dev` after Access is set up, sign in with `bitbybit0123
 
 ```bash
 # Redeploy after any code changes
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npm run deploy
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npm run deploy
 
 # Update a secret
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npx wrangler secret put POLICY_AUD
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npx wrangler secret put TEAM_DOMAIN
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npx wrangler secret put POLICY_AUD
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npx wrangler secret put TEAM_DOMAIN
 
 # Live logs
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npx wrangler tail b3-internal-mail
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npx wrangler tail b3-internal-mail
 
 # Local dev
 npm run dev

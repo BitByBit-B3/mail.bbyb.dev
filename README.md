@@ -76,7 +76,7 @@ This runs `wrangler types` (regenerates `worker-configuration.d.ts`), `react-rou
 ### Deploy
 
 ```bash
-CLOUDFLARE_ACCOUNT_ID=8f0203259905d8923687286c84921e6c npm run deploy
+CLOUDFLARE_ACCOUNT_ID=<your-account-id> npm run deploy
 ```
 
 ---
@@ -152,13 +152,10 @@ claude mcp add --transport http b3-mail https://mail.bbyb.dev/mcp
 
 ## Cloudflare Configuration
 
-- **Account:** BitByBit (`8f0203259905d8923687286c84921e6c`)
-- **Zone:** `bbyb.dev` (`edbc6334a5f99b90be9a2f1c65876826`)
 - **Worker name:** `b3-internal-mail`
 - **Route:** `mail.bbyb.dev/*`
 - **R2 bucket:** `b3-mail`
-- **Access policy:** OTP, restricted to `bitbybit0123@gmail.com`
-- **Team domain:** `bitbybit-b3.cloudflareaccess.com`
+- **Access policy:** OTP, restricted to your team
 
 ---
 
