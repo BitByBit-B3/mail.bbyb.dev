@@ -43,4 +43,14 @@ export const attachments = sqliteTable("attachments", {
 	size: integer("size").notNull(),
 	content_id: text("content_id"),
 	disposition: text("disposition"),
+	r2_key: text("r2_key"),
+});
+
+export const pending_uploads = sqliteTable("pending_uploads", {
+	upload_id: text("upload_id").primaryKey(),
+	r2_key: text("r2_key").notNull(),
+	filename: text("filename").notNull(),
+	mimetype: text("mimetype").notNull(),
+	size: integer("size").notNull(),
+	created_at: integer("created_at").notNull(),
 });

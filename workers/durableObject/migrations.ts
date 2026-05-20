@@ -175,4 +175,22 @@ export const mailboxMigrations: Migration[] = [
 			ALTER TABLE emails ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
 		`),
 	},
+	{
+		name: "10_big_attachments_staging",
+		sql: `
+        ALTER TABLE attachments ADD COLUMN r2_key TEXT;
+
+        CREATE TABLE IF NOT EXISTS pending_uploads (
+            upload_id TEXT PRIMARY KEY,
+            r2_key TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            mimetype TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_pending_uploads_created
+            ON pending_uploads(created_at);
+    `,
+	},
 ];
