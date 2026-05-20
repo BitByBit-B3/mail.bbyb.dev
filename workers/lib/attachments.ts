@@ -18,6 +18,25 @@ export interface StoredAttachment {
 	size: number;
 	content_id: string | null;
 	disposition: string | null;
+	r2_key?: string | null;
+}
+
+/**
+ * Resolve the R2 key for an attachment row.
+ *
+ * Legacy rows (r2_key NULL) use the implicit convention
+ * `attachments/<emailId>/<id>/<filename>`. New big-file attachments
+ * stamp `r2_key` explicitly because they live at
+ * `uploads/<mailboxId>/<uploadId>` (no copy).
+ */
+export function attachmentR2Key(att: {
+	id: string;
+	email_id: string;
+	filename: string;
+	r2_key?: string | null;
+}): string {
+	if (att.r2_key) return att.r2_key;
+	return `attachments/${att.email_id}/${att.id}/${att.filename}`;
 }
 
 export interface PersistedAttachmentRecord extends StoredAttachment {}
@@ -87,7 +106,7 @@ async function materializeAttachment(
 		throw new Error("Attachment not found.");
 	}
 
-	const objectKey = `attachments/${stored.email_id}/${stored.id}/${stored.filename}`;
+	const objectKey = attachmentR2Key(stored);
 	const object = await bucket.get(objectKey);
 	if (!object) {
 		throw new Error("Attachment file not found.");

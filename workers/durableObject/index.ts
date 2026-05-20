@@ -617,6 +617,74 @@ export class MailboxDO extends DurableObject<Env> {
 		);
 	}
 
+	// ── Pending uploads (Drizzle) ──────────────────────────────────
+
+	async insertPendingUpload(input: {
+		uploadId: string;
+		r2Key: string;
+		filename: string;
+		mimetype: string;
+		size: number;
+	}): Promise<void> {
+		this.db
+			.insert(schema.pending_uploads)
+			.values({
+				upload_id: input.uploadId,
+				r2_key: input.r2Key,
+				filename: input.filename,
+				mimetype: input.mimetype,
+				size: input.size,
+				created_at: Date.now(),
+			})
+			.run();
+	}
+
+	async getPendingUpload(uploadId: string): Promise<{
+		upload_id: string;
+		r2_key: string;
+		filename: string;
+		mimetype: string;
+		size: number;
+		created_at: number;
+	} | null> {
+		return (
+			this.db
+				.select()
+				.from(schema.pending_uploads)
+				.where(eq(schema.pending_uploads.upload_id, uploadId))
+				.get() ?? null
+		);
+	}
+
+	async deletePendingUpload(uploadId: string): Promise<void> {
+		this.db
+			.delete(schema.pending_uploads)
+			.where(eq(schema.pending_uploads.upload_id, uploadId))
+			.run();
+	}
+
+	async sumPendingUploadSize(): Promise<number> {
+		const row = this.db
+			.select({ total: sql<number>`COALESCE(SUM(${schema.pending_uploads.size}), 0)` })
+			.from(schema.pending_uploads)
+			.get();
+		return Number(row?.total ?? 0);
+	}
+
+	async listPendingUploadsOlderThan(cutoffMs: number): Promise<Array<{
+		upload_id: string;
+		r2_key: string;
+	}>> {
+		return this.db
+			.select({
+				upload_id: schema.pending_uploads.upload_id,
+				r2_key: schema.pending_uploads.r2_key,
+			})
+			.from(schema.pending_uploads)
+			.where(sql`${schema.pending_uploads.created_at} < ${cutoffMs}`)
+			.all();
+	}
+
 	// ── Folders (Drizzle) ──────────────────────────────────────────
 
 	async getFolders() {
