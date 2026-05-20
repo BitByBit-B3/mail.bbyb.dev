@@ -11,7 +11,9 @@
 	],
 	"vars": {
 		"DOMAINS": "bbyb.dev",
-		"EMAIL_ADDRESSES": []
+		"EMAIL_ADDRESSES": [],
+		"R2_S3_ACCOUNT_ID": "8f0203259905d8923687286c84921e6c",
+		"R2_S3_BUCKET": "b3-mail"
 	},
 	"routes": [
 		{

@@ -4,4 +4,6 @@
 
 export interface Env extends Cloudflare.Env {
 	APP_PASSWORD: string;
+	R2_S3_ACCESS_KEY_ID: string;
+	R2_S3_SECRET_ACCESS_KEY: string;
 }
