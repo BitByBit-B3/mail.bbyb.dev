@@ -102,3 +102,54 @@ test.describe("big attachments — cancel endpoint", () => {
 		expect(reconfirmRes.status()).toBe(404);
 	});
 });
+
+test.describe("big attachments — send with r2-staged", () => {
+	test("a small r2-staged file lands as a real attachment in Sent", async ({ request }) => {
+		// 1. Upload a small file via the new pipeline
+		const signRes = await request.post(SIGN_URL, {
+			data: { filename: "hello.txt", size: 5, type: "text/plain" },
+		});
+		const { uploadId, url } = await signRes.json();
+		await request.put(url, { data: "hello", headers: { "content-type": "text/plain" } });
+		await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "hello.txt", type: "text/plain" } },
+		);
+
+		// 2. Send an email referencing it
+		const sendRes = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails`,
+			{
+				data: {
+					to: MAILBOX,
+					from: MAILBOX,
+					subject: "r2-staged small attach test",
+					html: "<p>body</p>",
+					text: "body",
+					attachments: [
+						{
+							kind: "r2-staged",
+							uploadId,
+							filename: "hello.txt",
+							type: "text/plain",
+							size: 5,
+							disposition: "attachment",
+						},
+					],
+				},
+			},
+		);
+		expect(sendRes.status()).toBe(200);
+
+		// 3. Find the email in Sent
+		const sentRes = await request.get(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails?folder=sent`,
+		);
+		expect(sentRes.status()).toBe(200);
+		const emails = await sentRes.json();
+		const ours = emails.emails?.find?.(
+			(e: { subject?: string }) => e.subject === "r2-staged small attach test",
+		);
+		expect(ours).toBeDefined();
+	});
+});

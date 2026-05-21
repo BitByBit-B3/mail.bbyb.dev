@@ -313,6 +313,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		c.env.BUCKET,
 		attachments,
 		(attachmentId) => lookupAttachment(c, attachmentId),
+		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
 	const attachmentData = await storeMaterializedAttachments(
 		c.env.BUCKET,
@@ -353,6 +354,7 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 		c.env.BUCKET,
 		attachments,
 		(attachmentId) => lookupAttachment(c, attachmentId),
+		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
 	const messageId = crypto.randomUUID();
 	const now = new Date().toISOString();

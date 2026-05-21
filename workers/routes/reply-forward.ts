@@ -68,6 +68,7 @@ export async function handleReplyEmail(c: AppContext) {
 		c.env.BUCKET,
 		attachments,
 		(attachmentId) => lookupAttachment(c, attachmentId),
+		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
 	const attachmentData = await storeMaterializedAttachments(
 		c.env.BUCKET,
@@ -157,6 +158,7 @@ export async function handleForwardEmail(c: AppContext) {
 		c.env.BUCKET,
 		attachments,
 		(attachmentId) => lookupAttachment(c, attachmentId),
+		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
 	const attachmentData = await storeMaterializedAttachments(
 		c.env.BUCKET,

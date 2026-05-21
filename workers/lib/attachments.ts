@@ -54,6 +54,17 @@ type AttachmentLookup = (
 	attachmentId: string,
 ) => Promise<PersistedAttachmentRecord | null>;
 
+export type PendingUploadLookup = (
+	uploadId: string,
+) => Promise<{
+	upload_id: string;
+	r2_key: string;
+	filename: string;
+	mimetype: string;
+	size: number;
+	created_at: number;
+} | null>;
+
 function sanitizeFilename(filename: string) {
 	return (filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
 }
@@ -84,6 +95,7 @@ async function materializeAttachment(
 	bucket: Env["BUCKET"],
 	attachment: ComposeAttachmentPayload,
 	lookupAttachment?: AttachmentLookup,
+	lookupPendingUpload?: PendingUploadLookup,
 ): Promise<MaterializedAttachment> {
 	if (attachment.kind === "upload") {
 		const bytes = decodeBase64(attachment.content);
@@ -98,9 +110,34 @@ async function materializeAttachment(
 	}
 
 	if (attachment.kind === "r2-staged") {
-		throw new Error(
-			"r2-staged materialization not yet implemented (see Task 1.8)",
-		);
+		// R2 staged attachments live at `uploads/<mailboxId>/<uploadId>`.
+		// The caller (send route) has already validated ownership via the
+		// pending_uploads row — we trust the r2_key recorded there.
+		if (!lookupPendingUpload) {
+			throw new Error(
+				"r2-staged attachments require lookupPendingUpload context.",
+			);
+		}
+		const pending = await lookupPendingUpload(attachment.uploadId);
+		if (!pending) {
+			throw new Error(`Pending upload ${attachment.uploadId} not found.`);
+		}
+		const object = await bucket.get(pending.r2_key);
+		if (!object) {
+			throw new Error(
+				`R2 object missing for upload ${attachment.uploadId}.`,
+			);
+		}
+		const bytes = new Uint8Array(await object.arrayBuffer());
+		return {
+			filename: sanitizeFilename(pending.filename),
+			mimetype:
+				pending.mimetype || attachment.type || "application/octet-stream",
+			size: bytes.byteLength,
+			contentId: attachment.contentId,
+			disposition: attachment.disposition,
+			bytes,
+		};
 	}
 
 	if (!lookupAttachment) {
@@ -133,11 +170,17 @@ export async function materializeComposeAttachments(
 	bucket: Env["BUCKET"],
 	attachments?: ComposeAttachmentPayload[],
 	lookupAttachment?: AttachmentLookup,
+	lookupPendingUpload?: PendingUploadLookup,
 ): Promise<MaterializedAttachment[]> {
 	if (!attachments?.length) return [];
 	return Promise.all(
 		attachments.map((attachment) =>
-			materializeAttachment(bucket, attachment, lookupAttachment),
+			materializeAttachment(
+				bucket,
+				attachment,
+				lookupAttachment,
+				lookupPendingUpload,
+			),
 		),
 	);
 }
