@@ -35,3 +35,44 @@ test.describe("big attachments — sign endpoint", () => {
 		expect(res.status()).toBe(400);
 	});
 });
+
+test.describe("big attachments — confirm endpoint", () => {
+	test("returns 404 when R2 object is missing", async ({ request }) => {
+		const res = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{
+				data: {
+					uploadId: "00000000-0000-0000-0000-000000000000",
+					filename: "ghost.pdf",
+					type: "application/pdf",
+				},
+			},
+		);
+		expect(res.status()).toBe(404);
+	});
+
+	test("full sign + PUT + confirm flow lands in pending_uploads", async ({ request }) => {
+		// 1. Sign
+		const signRes = await request.post(SIGN_URL, {
+			data: { filename: "tiny.txt", size: 5, type: "text/plain" },
+		});
+		const { uploadId, url } = await signRes.json();
+
+		// 2. PUT to the presigned URL
+		const putRes = await request.put(url, {
+			data: "hello",
+			headers: { "content-type": "text/plain" },
+		});
+		expect(putRes.status()).toBe(200);
+
+		// 3. Confirm
+		const confirmRes = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "tiny.txt", type: "text/plain" } },
+		);
+		expect(confirmRes.status()).toBe(200);
+		const confirmBody = await confirmRes.json();
+		expect(confirmBody.uploadId).toBe(uploadId);
+		expect(confirmBody.size).toBe(5);
+	});
+});
