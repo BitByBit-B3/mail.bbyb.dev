@@ -10,6 +10,24 @@ import type { ComposeAttachmentPayload } from "../../shared/compose-attachments"
 import type { SendEmailParams } from "../email-sender";
 import type { Env } from "../types";
 
+/**
+ * SMTP-attached size ceiling. Files at or below this go into the outbound
+ * MIME message; files above are uploaded once and delivered as a download
+ * link card injected into the body. The 10 MiB threshold leaves headroom
+ * under the Email Workers 25 MiB outbound cap.
+ */
+export const REAL_ATTACH_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+export function shouldSendAsLink(att: {
+	size: number;
+	disposition: "attachment" | "inline";
+}): boolean {
+	// Inline images (e.g. signature embeds) always go as real attachments
+	// regardless of size — they're referenced by CID from the HTML body.
+	if (att.disposition === "inline") return false;
+	return att.size > REAL_ATTACH_THRESHOLD_BYTES;
+}
+
 export interface StoredAttachment {
 	id: string;
 	email_id: string;
@@ -241,5 +259,142 @@ export async function deleteAttachmentBlobs(
 			(attachment) =>
 				`attachments/${emailId}/${attachment.id}/${attachment.filename}`,
 		),
+	);
+}
+
+interface HybridStoreInput {
+	bucket: Env["BUCKET"];
+	emailId: string;
+	publicBaseUrl: string; // e.g. "https://mail.bbyb.dev"
+	attachments: Array<{
+		materialized: MaterializedAttachment;
+		// If this is r2-staged, the original r2Key (so we can skip re-uploading).
+		sourceR2Key?: string;
+	}>;
+}
+
+interface HybridStoreOutput {
+	realAttached: MaterializedAttachment[]; // → these go into the MIME
+	persisted: StoredAttachment[]; // → attachments rows
+	linkCards: Array<{ filename: string; size: number; downloadUrl: string }>;
+}
+
+/**
+ * Decide per-attachment whether to inline (≤ 10 MiB) or link-deliver (> 10 MiB).
+ *
+ * - Small files get stream-copied to `attachments/<emailId>/<attId>/<filename>`
+ *   to match the existing inbound convention (`r2_key = NULL`).
+ * - Big files stay at their source key (`r2_key` stamped explicitly).
+ * - For each link-delivered attachment, write a download-token JSON object so
+ *   the unauthenticated `/d/...` route can serve it.
+ */
+export async function storeMaterializedAttachmentsHybrid(
+	input: HybridStoreInput,
+): Promise<HybridStoreOutput> {
+	const realAttached: MaterializedAttachment[] = [];
+	const persisted: StoredAttachment[] = [];
+	const linkCards: Array<{ filename: string; size: number; downloadUrl: string }> = [];
+
+	for (const { materialized, sourceR2Key } of input.attachments) {
+		const attachmentId = crypto.randomUUID();
+		const sendAsLink = shouldSendAsLink({
+			size: materialized.size,
+			disposition: materialized.disposition,
+		});
+
+		const safeFilename = sanitizeFilename(materialized.filename);
+
+		if (sendAsLink) {
+			// Big file — keep at source key. If somehow sourceR2Key is missing
+			// (e.g. an `upload` kind that's still in the base64 path), put it
+			// to a stable location first.
+			let r2Key = sourceR2Key;
+			if (!r2Key) {
+				r2Key = `attachments/${input.emailId}/${attachmentId}/${safeFilename}`;
+				await input.bucket.put(r2Key, materialized.bytes, {
+					httpMetadata: { contentType: materialized.mimetype },
+				});
+			}
+
+			// Write the download token so /d/ can serve it.
+			const tokenKey = `download-tokens/${attachmentId}.json`;
+			await input.bucket.put(
+				tokenKey,
+				JSON.stringify({
+					mailboxId: "", // filled by caller via stampMailboxOnDownloadTokens
+					r2Key,
+					filename: safeFilename,
+					mimetype: materialized.mimetype,
+				}),
+				{ httpMetadata: { contentType: "application/json" } },
+			);
+
+			persisted.push({
+				id: attachmentId,
+				email_id: input.emailId,
+				filename: safeFilename,
+				mimetype: materialized.mimetype,
+				size: materialized.size,
+				content_id: materialized.contentId ?? null,
+				disposition: materialized.disposition,
+				r2_key: r2Key,
+			});
+
+			const downloadUrl = `${input.publicBaseUrl}/d/${input.emailId}/${attachmentId}/${encodeURIComponent(safeFilename)}`;
+			linkCards.push({
+				filename: safeFilename,
+				size: materialized.size,
+				downloadUrl,
+			});
+		} else {
+			// Small file — stream-copy to per-email location.
+			const r2Key = `attachments/${input.emailId}/${attachmentId}/${safeFilename}`;
+			await input.bucket.put(r2Key, materialized.bytes, {
+				httpMetadata: { contentType: materialized.mimetype },
+			});
+			persisted.push({
+				id: attachmentId,
+				email_id: input.emailId,
+				filename: safeFilename,
+				mimetype: materialized.mimetype,
+				size: materialized.size,
+				content_id: materialized.contentId ?? null,
+				disposition: materialized.disposition,
+				r2_key: null,
+			});
+			realAttached.push(materialized);
+		}
+	}
+
+	return { realAttached, persisted, linkCards };
+}
+
+/**
+ * Backfill the `mailboxId` field on download-token JSON blobs after the
+ * hybrid store has run. Kept out of the hybrid store itself because it
+ * doesn't naturally know which mailbox the email belongs to.
+ */
+export async function stampMailboxOnDownloadTokens(
+	bucket: Env["BUCKET"],
+	attachmentIds: string[],
+	mailboxId: string,
+): Promise<void> {
+	if (attachmentIds.length === 0) return;
+	await Promise.all(
+		attachmentIds.map(async (attId) => {
+			const key = `download-tokens/${attId}.json`;
+			const obj = await bucket.get(key);
+			if (!obj) return;
+			const data = (await obj.json()) as {
+				mailboxId: string;
+				r2Key: string;
+				filename: string;
+				mimetype: string;
+			};
+			const updated = { ...data, mailboxId };
+			await bucket.put(key, JSON.stringify(updated), {
+				httpMetadata: { contentType: "application/json" },
+			});
+		}),
 	);
 }

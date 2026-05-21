@@ -6,10 +6,12 @@ import type { Context } from "hono";
 import { sendEmail } from "../email-sender";
 import {
 	materializeComposeAttachments,
-	storeMaterializedAttachments,
+	storeMaterializedAttachmentsHybrid,
+	stampMailboxOnDownloadTokens,
 	toSendEmailAttachments,
 	type PersistedAttachmentRecord,
 } from "../lib/attachments";
+import { injectLinkCardsHtml, injectLinkCardsText } from "../lib/link-card";
 import type { EmailFull } from "../lib/schemas";
 import {
 	validateSender,
@@ -70,11 +72,35 @@ export async function handleReplyEmail(c: AppContext) {
 		(attachmentId) => lookupAttachment(c, attachmentId),
 		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
-	const attachmentData = await storeMaterializedAttachments(
+
+	const withSources = materializedAttachments.map((m, idx) => {
+		const input = attachments?.[idx];
+		const sourceR2Key =
+			input?.kind === "r2-staged"
+				? `uploads/${mailboxId}/${input.uploadId}`
+				: undefined;
+		return { materialized: m, sourceR2Key };
+	});
+
+	const publicBaseUrl = c.req.url
+		.replace(/\/api\/v1\/.*$/, "")
+		.replace(/\/$/, "");
+
+	const { realAttached, persisted, linkCards } = await storeMaterializedAttachmentsHybrid({
+		bucket: c.env.BUCKET,
+		emailId: messageId,
+		publicBaseUrl,
+		attachments: withSources,
+	});
+
+	await stampMailboxOnDownloadTokens(
 		c.env.BUCKET,
-		messageId,
-		materializedAttachments,
+		persisted.filter((p) => p.r2_key !== null && p.r2_key !== undefined).map((p) => p.id),
+		mailboxId,
 	);
+
+	const htmlWithCards = linkCards.length > 0 ? injectLinkCardsHtml(html, linkCards) : html;
+	const textWithCards = linkCards.length > 0 ? injectLinkCardsText(text, linkCards) : text;
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -86,7 +112,7 @@ export async function handleReplyEmail(c: AppContext) {
 			cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc).toLowerCase() : null,
 			bcc: bcc ? (Array.isArray(bcc) ? bcc.join(", ") : bcc).toLowerCase() : null,
 			date: new Date().toISOString(),
-			body: html || text || "",
+			body: htmlWithCards || textWithCards || "",
 			in_reply_to: originalMsgId,
 			email_references: JSON.stringify(references),
 			thread_id: thread_id,
@@ -103,22 +129,23 @@ export async function handleReplyEmail(c: AppContext) {
 				...(references.length > 0 ? [{ key: "references", value: references.map((r: string) => `<${r}>`).join(" ") }] : []),
 			]),
 		},
-		attachmentData,
+		persisted,
 	);
 
 	await stub.markThreadRead(thread_id);
 
 	// Synchronous send: block until SMTP accepts (or fails). If sendEmail
-	// throws, propagate to a 500 so the client can retry.
+	// throws, propagate to a 500 so the client can retry. Only small files
+	// (`realAttached`) go into the MIME — big files travel via /d/ link card.
 	await sendEmail(c.env.EMAIL, {
 		to,
 		cc,
 		bcc,
 		from,
 		subject,
-		html,
-		text,
-		attachments: toSendEmailAttachments(materializedAttachments),
+		html: htmlWithCards,
+		text: textWithCards,
+		attachments: toSendEmailAttachments(realAttached),
 		headers: buildThreadingHeaders(originalMsgId, references),
 	});
 
@@ -170,11 +197,35 @@ export async function handleForwardEmail(c: AppContext) {
 		(attachmentId) => lookupAttachment(c, attachmentId),
 		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
-	const attachmentData = await storeMaterializedAttachments(
+
+	const withSources = materializedAttachments.map((m, idx) => {
+		const input = attachments?.[idx];
+		const sourceR2Key =
+			input?.kind === "r2-staged"
+				? `uploads/${mailboxId}/${input.uploadId}`
+				: undefined;
+		return { materialized: m, sourceR2Key };
+	});
+
+	const publicBaseUrl = c.req.url
+		.replace(/\/api\/v1\/.*$/, "")
+		.replace(/\/$/, "");
+
+	const { realAttached, persisted, linkCards } = await storeMaterializedAttachmentsHybrid({
+		bucket: c.env.BUCKET,
+		emailId: messageId,
+		publicBaseUrl,
+		attachments: withSources,
+	});
+
+	await stampMailboxOnDownloadTokens(
 		c.env.BUCKET,
-		messageId,
-		materializedAttachments,
+		persisted.filter((p) => p.r2_key !== null && p.r2_key !== undefined).map((p) => p.id),
+		mailboxId,
 	);
+
+	const htmlWithCards = linkCards.length > 0 ? injectLinkCardsHtml(html, linkCards) : html;
+	const textWithCards = linkCards.length > 0 ? injectLinkCardsText(text, linkCards) : text;
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -186,7 +237,7 @@ export async function handleForwardEmail(c: AppContext) {
 			cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc).toLowerCase() : null,
 			bcc: bcc ? (Array.isArray(bcc) ? bcc.join(", ") : bcc).toLowerCase() : null,
 			date: new Date().toISOString(),
-			body: html || text || "",
+			body: htmlWithCards || textWithCards || "",
 			in_reply_to: null,
 			email_references: null,
 			thread_id: messageId,
@@ -201,7 +252,7 @@ export async function handleForwardEmail(c: AppContext) {
 				{ key: "message-id", value: `<${outgoingMessageId}>` },
 			]),
 		},
-		attachmentData,
+		persisted,
 	);
 
 	await sendEmail(c.env.EMAIL, {
@@ -210,9 +261,9 @@ export async function handleForwardEmail(c: AppContext) {
 		bcc,
 		from,
 		subject,
-		html,
-		text,
-		attachments: toSendEmailAttachments(materializedAttachments),
+		html: htmlWithCards,
+		text: textWithCards,
+		attachments: toSendEmailAttachments(realAttached),
 	});
 
 	if (attachments) {

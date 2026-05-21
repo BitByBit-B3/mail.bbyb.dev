@@ -172,3 +172,90 @@ test.describe("big attachments — send with r2-staged", () => {
 		expect(ours).toBeDefined();
 	});
 });
+
+test.describe("big attachments — link delivery", () => {
+	test("a 12 MB file is delivered as a download link, not as MIME", async ({ request }) => {
+		// 1. Upload a 12 MB file (just above the 10 MB threshold)
+		const body = "A".repeat(12 * 1024 * 1024);
+		const signRes = await request.post(SIGN_URL, {
+			data: { filename: "big.txt", size: body.length, type: "text/plain" },
+		});
+		const { uploadId, url } = await signRes.json();
+		await request.put(url, { data: body, headers: { "content-type": "text/plain" } });
+		await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "big.txt", type: "text/plain" } },
+		);
+
+		// 2. Send the email
+		const sendRes = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails`,
+			{
+				data: {
+					to: MAILBOX,
+					from: MAILBOX,
+					subject: "link delivery test",
+					html: "<p>see attached</p>",
+					text: "see attached",
+					attachments: [{
+						kind: "r2-staged",
+						uploadId,
+						filename: "big.txt",
+						type: "text/plain",
+						size: body.length,
+						disposition: "attachment",
+					}],
+				},
+			},
+		);
+		expect(sendRes.status()).toBe(200);
+		const { id: sentEmailId } = await sendRes.json();
+
+		// 3. Fetch the email — body should contain a /d/ link
+		const emailRes = await request.get(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails/${sentEmailId}`,
+		);
+		const email = await emailRes.json();
+		expect(email.body).toContain(`/d/${sentEmailId}/`);
+		expect(email.body).toContain("big.txt");
+
+		// 4. The /d/ link should resolve and serve the file
+		const downloadUrlMatch = email.body.match(/\/d\/[^"<>\s]+/);
+		expect(downloadUrlMatch).not.toBeNull();
+		const dlRes = await request.get(downloadUrlMatch![0]);
+		expect(dlRes.status()).toBe(200);
+		expect(dlRes.headers()["content-disposition"]).toContain('filename="big.txt"');
+	});
+
+	test("a small file goes as a real MIME attachment, not a link", async ({ request }) => {
+		const signRes = await request.post(SIGN_URL, {
+			data: { filename: "small.txt", size: 6, type: "text/plain" },
+		});
+		const { uploadId, url } = await signRes.json();
+		await request.put(url, { data: "small!", headers: { "content-type": "text/plain" } });
+		await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "small.txt", type: "text/plain" } },
+		);
+		const sendRes = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails`,
+			{
+				data: {
+					to: MAILBOX, from: MAILBOX, subject: "small attach",
+					html: "<p>hi</p>", text: "hi",
+					attachments: [{
+						kind: "r2-staged", uploadId,
+						filename: "small.txt", type: "text/plain",
+						size: 6, disposition: "attachment",
+					}],
+				},
+			},
+		);
+		const { id: sentEmailId } = await sendRes.json();
+		const emailRes = await request.get(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/emails/${sentEmailId}`,
+		);
+		const email = await emailRes.json();
+		expect(email.body).not.toContain(`/d/${sentEmailId}/`);
+	});
+});

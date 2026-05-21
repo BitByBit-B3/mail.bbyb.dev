@@ -11,10 +11,13 @@ import {
 	deleteAttachmentBlobs,
 	materializeComposeAttachments,
 	storeMaterializedAttachments,
+	storeMaterializedAttachmentsHybrid,
+	stampMailboxOnDownloadTokens,
 	toSendEmailAttachments,
 	type PersistedAttachmentRecord,
 	type StoredAttachment,
 } from "./lib/attachments";
+import { injectLinkCardsHtml, injectLinkCardsText } from "./lib/link-card";
 import {
 	validateSender,
 	SenderValidationError,
@@ -314,17 +317,46 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		(attachmentId) => lookupAttachment(c, attachmentId),
 		(uploadId) => c.var.mailboxStub.getPendingUpload(uploadId),
 	);
-	const attachmentData = await storeMaterializedAttachments(
+
+	// Pair each materialized attachment with its source R2 key (only present
+	// for r2-staged inputs). The hybrid store uses sourceR2Key to avoid a
+	// re-upload when a big file already lives at `uploads/<mailboxId>/<uploadId>`.
+	const withSources = materializedAttachments.map((m, idx) => {
+		const input = attachments?.[idx];
+		const sourceR2Key =
+			input?.kind === "r2-staged"
+				? `uploads/${mailboxId}/${input.uploadId}`
+				: undefined;
+		return { materialized: m, sourceR2Key };
+	});
+
+	const publicBaseUrl = c.req.url
+		.replace(/\/api\/v1\/.*$/, "")
+		.replace(/\/$/, "");
+
+	const { realAttached, persisted, linkCards } = await storeMaterializedAttachmentsHybrid({
+		bucket: c.env.BUCKET,
+		emailId: messageId,
+		publicBaseUrl,
+		attachments: withSources,
+	});
+
+	await stampMailboxOnDownloadTokens(
 		c.env.BUCKET,
-		messageId,
-		materializedAttachments,
+		persisted.filter((p) => p.r2_key !== null && p.r2_key !== undefined).map((p) => p.id),
+		mailboxId,
 	);
+
+	// Inject link cards into the outgoing email body so the recipient sees a
+	// styled card with a Download link for each big-file attachment.
+	const htmlWithCards = linkCards.length > 0 ? injectLinkCardsHtml(html, linkCards) : html;
+	const textWithCards = linkCards.length > 0 ? injectLinkCardsText(text, linkCards) : text;
 
 	await stub.createEmail(Folders.SENT, {
 		id: messageId, subject, sender: fromEmail, recipient: toStr,
 		cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc).toLowerCase() : null,
 		bcc: bcc ? (Array.isArray(bcc) ? bcc.join(", ") : bcc).toLowerCase() : null,
-		date: new Date().toISOString(), body: html || text || "",
+		date: new Date().toISOString(), body: htmlWithCards || textWithCards || "",
 		in_reply_to: in_reply_to || null, email_references: references ? JSON.stringify(references) : null,
 		thread_id: thread_id || in_reply_to || messageId, message_id: outgoingMessageId,
 		raw_headers: JSON.stringify([
@@ -335,20 +367,25 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			{ key: "subject", value: subject }, { key: "date", value: new Date().toISOString() },
 			{ key: "message-id", value: `<${outgoingMessageId}>` },
 		]),
-	}, attachmentData);
+	}, persisted);
 
 	// Synchronous send: block until SMTP accepts (or fails). If sendEmail
 	// throws, propagate to a 500 so the client can retry. No queue, no
 	// background retry — the user owns the retry loop.
+	// Only small files (`realAttached`) go into the MIME — big files are
+	// served via the `/d/...` download link injected as link cards above.
 	await sendEmail(c.env.EMAIL, {
-		to, cc, bcc, from, subject, html, text,
-		attachments: toSendEmailAttachments(materializedAttachments),
+		to, cc, bcc, from, subject,
+		html: htmlWithCards,
+		text: textWithCards,
+		attachments: toSendEmailAttachments(realAttached),
 		...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
 	});
 
-	// Claim r2-staged uploads now that the bytes are safely persisted in
-	// `attachments/<emailId>/...` (via storeMaterializedAttachments). This
-	// removes them from the orphan-cleanup cron's purview.
+	// Claim r2-staged uploads now that the bytes are safely persisted.
+	// Small files were stream-copied into `attachments/<emailId>/...`; big
+	// files stayed at the source key and are referenced by attachments.r2_key.
+	// Either way, the pending_uploads row's job is done.
 	if (attachments) {
 		for (const att of attachments) {
 			if (att.kind === "r2-staged") {

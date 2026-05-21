@@ -98,6 +98,7 @@ interface AttachmentData {
 	size: number;
 	content_id?: string | null;
 	disposition?: string | null;
+	r2_key?: string | null;
 }
 
 export class MailboxDO extends DurableObject<Env> {
