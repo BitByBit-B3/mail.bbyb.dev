@@ -13,10 +13,15 @@ import type { Env } from "../types";
 /**
  * SMTP-attached size ceiling. Files at or below this go into the outbound
  * MIME message; files above are uploaded once and delivered as a download
- * link card injected into the body. The 10 MiB threshold leaves headroom
- * under the Email Workers 25 MiB outbound cap.
+ * link card injected into the body.
+ *
+ * Cloudflare Email Workers hard-caps outbound at 5 MiB (5,242,880 bytes)
+ * total — including body, headers, and base64-encoded attachments. Binary
+ * attachments expand ~1.37x in base64, so a 2 MiB raw file becomes ~2.74 MiB
+ * in the MIME — leaving ~2.26 MiB for the email body, headers, and any
+ * additional small attachments.
  */
-export const REAL_ATTACH_THRESHOLD_BYTES = 10 * 1024 * 1024;
+export const REAL_ATTACH_THRESHOLD_BYTES = 2 * 1024 * 1024;
 
 export function shouldSendAsLink(att: {
 	size: number;
@@ -262,7 +267,9 @@ interface HybridStoreOutput {
 }
 
 /**
- * Decide per-attachment whether to inline (≤ 10 MiB) or link-deliver (> 10 MiB).
+ * Decide per-attachment whether to inline (≤ 2 MiB raw) or link-deliver
+ * (> 2 MiB raw) — the threshold accounts for base64 expansion under the 5 MiB
+ * Cloudflare Email Workers outbound cap.
  *
  * - Small files get stream-copied to `attachments/<emailId>/<attId>/<filename>`
  *   to match the existing inbound convention (`r2_key = NULL`).
