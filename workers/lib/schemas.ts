@@ -74,6 +74,15 @@ export const ComposeAttachmentSchema = z.discriminatedUnion("kind", [
 		disposition: z.enum(["attachment", "inline"]),
 		contentId: z.string().optional(),
 	}),
+	z.object({
+		kind: z.literal("r2-staged"),
+		uploadId: z.string().uuid(),
+		filename: z.string(),
+		type: z.string(),
+		size: z.number().int().nonnegative(),
+		disposition: z.enum(["attachment", "inline"]),
+		contentId: z.string().optional(),
+	}),
 ]);
 
 export const ErrorResponseSchema = z.object({

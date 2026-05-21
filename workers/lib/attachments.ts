@@ -97,6 +97,12 @@ async function materializeAttachment(
 		};
 	}
 
+	if (attachment.kind === "r2-staged") {
+		throw new Error(
+			"r2-staged materialization not yet implemented (see Task 1.8)",
+		);
+	}
+
 	if (!lookupAttachment) {
 		throw new Error("Stored attachments are not supported in this context.");
 	}

@@ -25,6 +25,17 @@ export interface StoredComposeAttachment {
 	contentId?: string;
 }
 
+export interface R2StagedComposeAttachment {
+	kind: "r2-staged";
+	uploadId: string;
+	filename: string;
+	type: string;
+	size: number;
+	disposition: ComposeAttachmentDisposition;
+	contentId?: string;
+}
+
 export type ComposeAttachmentPayload =
 	| UploadedComposeAttachment
-	| StoredComposeAttachment;
+	| StoredComposeAttachment
+	| R2StagedComposeAttachment;
