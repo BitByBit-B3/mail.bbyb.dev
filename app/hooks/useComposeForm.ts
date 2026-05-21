@@ -3,8 +3,15 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useKumoToastManager } from "@cloudflare/kumo";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { buildStoredComposeAttachments, readFilesAsComposeAttachments, serializeComposeAttachments, type ComposeAttachmentItem } from "~/lib/composeAttachments";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	buildStoredComposeAttachments,
+	serializeComposeAttachments,
+	uploadFilesToR2,
+	type ComposeAttachmentItem,
+	type UploadController,
+	type UploadProgress,
+} from "~/lib/composeAttachments";
 import {
 	buildQuotedReplyBlock,
 	escapeHtml,
@@ -186,6 +193,10 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
 	const [attachments, setAttachments] = useState<ComposeAttachmentItem[]>([]);
+	const [attachmentProgress, setAttachmentProgress] = useState<
+		Map<string, UploadProgress>
+	>(new Map());
+	const uploadControllers = useRef<Map<string, UploadController>>(new Map());
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
@@ -222,43 +233,107 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setDraftId(composeOptions.draftEmail?.id || undefined);
 	}, [composeOptions, currentMailbox?.email]);
 
-	const addAttachments = async (files: FileList | null) => {
-		if (!files || files.length === 0) return;
-		setIsAddingAttachments(true);
-
-		try {
-			const results = await Promise.allSettled(
-				Array.from(files).map((file) => readFilesAsComposeAttachments([file])),
-			);
-			const addedAttachments = results
-				.flatMap((result) =>
-					result.status === "fulfilled" ? result.value : [],
+	const addAttachments = useCallback(
+		async (files: FileList | null) => {
+			if (!files || files.length === 0) return;
+			if (!mailboxId) {
+				toastManager.add({
+					title: "Select a mailbox before attaching files.",
+					variant: "error",
+				});
+				return;
+			}
+			const totalIncoming = Array.from(files).length;
+			setIsAddingAttachments(true);
+			try {
+				const newItems = await uploadFilesToR2(
+					files,
+					mailboxId,
+					(p) => {
+						setAttachmentProgress((prev) => {
+							const next = new Map(prev);
+							next.set(p.localId, p);
+							return next;
+						});
+					},
+					uploadControllers.current,
+					{
+						onItemStart: (item) => {
+							// Eagerly add a placeholder row so the progress bar
+							// has something to render against. The placeholder
+							// uses an empty uploadId; it's replaced when the
+							// upload finishes.
+							setAttachments((current) => [
+								...current,
+								{
+									localId: item.localId,
+									kind: "r2-staged",
+									uploadId: "",
+									filename: item.filename,
+									type: item.type,
+									size: item.size,
+									disposition: "attachment",
+								},
+							]);
+						},
+						onItemFailed: (localId) => {
+							setAttachments((current) =>
+								current.filter((a) => a.localId !== localId),
+							);
+						},
+					},
 				);
-			const firstFailure = results.find(
-				(result): result is PromiseRejectedResult =>
-					result.status === "rejected",
-			);
-
-			if (addedAttachments.length > 0) {
-				setAttachments((current) => [...current, ...addedAttachments]);
+				if (newItems.length > 0) {
+					// Replace placeholder rows (matched by localId) with the
+					// confirmed items that now carry real uploadIds.
+					setAttachments((current) => {
+						const byLocalId = new Map(
+							newItems.map((item) => [item.localId, item]),
+						);
+						return current.map((existing) =>
+							byLocalId.get(existing.localId) ?? existing,
+						);
+					});
+				}
+				if (newItems.length < totalIncoming) {
+					toastManager.add({
+						title: "Some files failed to upload.",
+						variant: "error",
+					});
+				}
+			} finally {
+				setIsAddingAttachments(false);
 			}
+		},
+		[mailboxId, toastManager],
+	);
 
-			if (firstFailure) {
-				const message =
-					firstFailure.reason instanceof Error
-						? firstFailure.reason.message
-						: "Failed to add one or more attachments.";
-				toastManager.add({ title: message, variant: "error" });
-			}
-		} finally {
-			setIsAddingAttachments(false);
-		}
-	};
+	const cancelUpload = useCallback((localId: string) => {
+		uploadControllers.current.get(localId)?.abort();
+		// The abort will trigger `onItemFailed`, which strips the placeholder
+		// row from `attachments`. Clear progress here too so the row vanishes
+		// cleanly even in the rare case where abort and rejection race.
+		setAttachmentProgress((prev) => {
+			if (!prev.has(localId)) return prev;
+			const next = new Map(prev);
+			next.delete(localId);
+			return next;
+		});
+		setAttachments((current) =>
+			current.filter((a) => a.localId !== localId),
+		);
+	}, []);
 
 	const removeAttachment = (localId: string) => {
 		setAttachments((current) =>
 			current.filter((attachment) => attachment.localId !== localId),
 		);
+		setAttachmentProgress((prev) => {
+			if (!prev.has(localId)) return prev;
+			const next = new Map(prev);
+			next.delete(localId);
+			return next;
+		});
 	};
 
 	const handleSaveDraft = async () => {
@@ -328,5 +403,34 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, attachments, isAddingAttachments, addAttachments, removeAttachment, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel, sigBlock };
+	return {
+		to,
+		setTo,
+		cc,
+		setCc,
+		bcc,
+		setBcc,
+		showCcBcc,
+		setShowCcBcc,
+		subject,
+		setSubject,
+		body,
+		setBody,
+		attachments,
+		attachmentProgress,
+		isAddingAttachments,
+		addAttachments,
+		cancelUpload,
+		removeAttachment,
+		error,
+		setError,
+		isSavingDraft,
+		isSending,
+		formTitle,
+		handleSaveDraft,
+		handleSend,
+		closeCompose,
+		closePanel,
+		sigBlock,
+	};
 }

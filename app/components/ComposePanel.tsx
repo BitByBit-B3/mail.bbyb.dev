@@ -38,8 +38,10 @@ export default function ComposePanel() {
 		body,
 		setBody,
 		attachments,
+		attachmentProgress,
 		isAddingAttachments,
 		addAttachments,
+		cancelUpload,
 		removeAttachment,
 		error,
 		isSavingDraft,
@@ -207,9 +209,11 @@ export default function ComposePanel() {
 
 					<ComposeAttachments
 						attachments={attachments}
+						progress={attachmentProgress}
 						isAddingAttachments={isAddingAttachments}
 						disabled={isSending || isSavingDraft}
 						onAddFiles={addAttachments}
+						onCancelUpload={cancelUpload}
 						onRemoveAttachment={removeAttachment}
 					/>
 				</div>

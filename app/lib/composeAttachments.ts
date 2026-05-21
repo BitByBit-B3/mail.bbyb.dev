@@ -67,17 +67,33 @@ export async function readFilesAsComposeAttachments(
 	);
 }
 
+export interface UploadStartedItem {
+	localId: string;
+	filename: string;
+	type: string;
+	size: number;
+}
+
 /**
  * Sign → PUT → confirm. Yields one ComposeAttachmentItem per file (r2-staged kind).
  *
  * Uses XMLHttpRequest for the PUT step because `fetch()` does not expose upload
  * progress events in Workers and most browser/runtime combos.
+ *
+ * @param onItemStart Optional callback fired with the assigned localId before
+ *   the sign step. Lets the caller render a row + progress bar immediately.
+ * @param onItemFailed Optional callback fired when a file's upload fails or is
+ *   aborted, so the caller can remove its placeholder row.
  */
 export async function uploadFilesToR2(
 	files: FileList | File[],
 	mailboxId: string,
 	onProgress: (p: UploadProgress) => void,
 	controllers: Map<string, UploadController>,
+	callbacks?: {
+		onItemStart?: (item: UploadStartedItem) => void;
+		onItemFailed?: (localId: string) => void;
+	},
 ): Promise<ComposeAttachmentItem[]> {
 	const items: ComposeAttachmentItem[] = [];
 
@@ -85,6 +101,13 @@ export async function uploadFilesToR2(
 		const localId = crypto.randomUUID();
 		const controller = new AbortController();
 		controllers.set(localId, { abort: () => controller.abort() });
+
+		callbacks?.onItemStart?.({
+			localId,
+			filename: file.name || "untitled",
+			type: file.type || "application/octet-stream",
+			size: file.size,
+		});
 
 		try {
 			onProgress({ localId, phase: "signing", totalBytes: file.size });
@@ -166,6 +189,7 @@ export async function uploadFilesToR2(
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : "Upload failed";
 			onProgress({ localId, phase: "error", error: msg });
+			callbacks?.onItemFailed?.(localId);
 			// Don't push to items — caller drops failed uploads from the compose form.
 		} finally {
 			controllers.delete(localId);

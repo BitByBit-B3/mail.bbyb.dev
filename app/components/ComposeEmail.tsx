@@ -32,8 +32,10 @@ export default function ComposeEmail() {
 		body,
 		setBody,
 		attachments,
+		attachmentProgress,
 		isAddingAttachments,
 		addAttachments,
+		cancelUpload,
 		removeAttachment,
 		error,
 		isSavingDraft,
@@ -107,9 +109,11 @@ export default function ComposeEmail() {
 					/>
 					<ComposeAttachments
 						attachments={attachments}
+						progress={attachmentProgress}
 						isAddingAttachments={isAddingAttachments}
 						disabled={isSending || isSavingDraft}
 						onAddFiles={addAttachments}
+						onCancelUpload={cancelUpload}
 						onRemoveAttachment={removeAttachment}
 					/>
 					<div>
