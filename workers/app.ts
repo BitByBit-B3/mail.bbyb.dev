@@ -8,6 +8,7 @@ import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
 import { handleDownload } from "./routes/download";
+import { runOrphanCleanup } from "./scheduled";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -204,5 +205,8 @@ export default {
 			console.error("Failed to process incoming email:", (e as Error).message, (e as Error).stack);
 			throw e;
 		}
+	},
+	async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+		ctx.waitUntil(runOrphanCleanup(env));
 	},
 };
