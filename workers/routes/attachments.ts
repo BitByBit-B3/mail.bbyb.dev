@@ -82,3 +82,18 @@ export async function handleConfirmUpload(c: AppContext) {
 
 	return c.json({ uploadId, size: head.size });
 }
+
+export async function handleCancelUpload(c: AppContext) {
+	const mailboxId = c.req.param("mailboxId")!;
+	const uploadId = c.req.param("uploadId")!;
+
+	if (!/^[0-9a-f-]{36}$/.test(uploadId)) {
+		return c.json({ error: "Invalid uploadId." }, 400);
+	}
+
+	const key = uploadKey(mailboxId, uploadId);
+	await c.env.BUCKET.delete(key);
+	await c.var.mailboxStub.deletePendingUpload(uploadId);
+
+	return c.json({ ok: true });
+}

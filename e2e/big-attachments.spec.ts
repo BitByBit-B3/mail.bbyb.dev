@@ -76,3 +76,29 @@ test.describe("big attachments — confirm endpoint", () => {
 		expect(confirmBody.size).toBe(5);
 	});
 });
+
+test.describe("big attachments — cancel endpoint", () => {
+	test("deletes the staged upload", async ({ request }) => {
+		const signRes = await request.post(SIGN_URL, {
+			data: { filename: "trash.txt", size: 4, type: "text/plain" },
+		});
+		const { uploadId, url } = await signRes.json();
+		await request.put(url, { data: "junk", headers: { "content-type": "text/plain" } });
+		await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "trash.txt", type: "text/plain" } },
+		);
+
+		const cancelRes = await request.delete(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/${uploadId}`,
+		);
+		expect(cancelRes.status()).toBe(200);
+
+		// Re-confirm should now 404
+		const reconfirmRes = await request.post(
+			`/api/v1/mailboxes/${encodeURIComponent(MAILBOX)}/attachments/confirm`,
+			{ data: { uploadId, filename: "trash.txt", type: "text/plain" } },
+		);
+		expect(reconfirmRes.status()).toBe(404);
+	});
+});

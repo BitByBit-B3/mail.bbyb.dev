@@ -26,7 +26,7 @@ import {
 } from "./lib/email-helpers";
 import { ComposeAttachmentSchema, SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
-import { handleSignUpload, handleConfirmUpload } from "./routes/attachments";
+import { handleSignUpload, handleConfirmUpload, handleCancelUpload } from "./routes/attachments";
 import { generateEmailDraft } from "./lib/ai";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
@@ -425,6 +425,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
 
 app.post("/api/v1/mailboxes/:mailboxId/attachments/sign", handleSignUpload);
 app.post("/api/v1/mailboxes/:mailboxId/attachments/confirm", handleConfirmUpload);
+app.delete("/api/v1/mailboxes/:mailboxId/attachments/:uploadId", handleCancelUpload);
 
 // -- Folders --------------------------------------------------------
 
