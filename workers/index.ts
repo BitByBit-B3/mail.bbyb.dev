@@ -7,7 +7,6 @@ import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
-import { enqueueSend } from "./lib/outbound-queue";
 import {
 	deleteAttachmentBlobs,
 	materializeComposeAttachments,
@@ -338,12 +337,27 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		]),
 	}, attachmentData);
 
-	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+	// Synchronous send: block until SMTP accepts (or fails). If sendEmail
+	// throws, propagate to a 500 so the client can retry. No queue, no
+	// background retry — the user owns the retry loop.
+	await sendEmail(c.env.EMAIL, {
 		to, cc, bcc, from, subject, html, text,
 		attachments: toSendEmailAttachments(materializedAttachments),
 		...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
 	});
-	return c.json({ id: messageId, jobId, status: "queued" }, 202);
+
+	// Claim r2-staged uploads now that the bytes are safely persisted in
+	// `attachments/<emailId>/...` (via storeMaterializedAttachments). This
+	// removes them from the orphan-cleanup cron's purview.
+	if (attachments) {
+		for (const att of attachments) {
+			if (att.kind === "r2-staged") {
+				await stub.deletePendingUpload(att.uploadId);
+			}
+		}
+	}
+
+	return c.json({ id: messageId, status: "sent" });
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {

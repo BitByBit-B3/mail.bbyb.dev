@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type { Context } from "hono";
-import { enqueueSend } from "../lib/outbound-queue";
+import { sendEmail } from "../email-sender";
 import {
 	materializeComposeAttachments,
 	storeMaterializedAttachments,
@@ -108,7 +108,9 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
-	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+	// Synchronous send: block until SMTP accepts (or fails). If sendEmail
+	// throws, propagate to a 500 so the client can retry.
+	await sendEmail(c.env.EMAIL, {
 		to,
 		cc,
 		bcc,
@@ -120,7 +122,15 @@ export async function handleReplyEmail(c: AppContext) {
 		headers: buildThreadingHeaders(originalMsgId, references),
 	});
 
-	return c.json({ id: messageId, jobId, status: "queued" }, 202);
+	if (attachments) {
+		for (const att of attachments) {
+			if (att.kind === "r2-staged") {
+				await stub.deletePendingUpload(att.uploadId);
+			}
+		}
+	}
+
+	return c.json({ id: messageId, status: "sent" });
 }
 
 export async function handleForwardEmail(c: AppContext) {
@@ -194,7 +204,7 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	const { jobId } = await enqueueSend(c.env, mailboxId, messageId, {
+	await sendEmail(c.env.EMAIL, {
 		to,
 		cc,
 		bcc,
@@ -205,5 +215,13 @@ export async function handleForwardEmail(c: AppContext) {
 		attachments: toSendEmailAttachments(materializedAttachments),
 	});
 
-	return c.json({ id: messageId, jobId, status: "queued" }, 202);
+	if (attachments) {
+		for (const att of attachments) {
+			if (att.kind === "r2-staged") {
+				await stub.deletePendingUpload(att.uploadId);
+			}
+		}
+	}
+
+	return c.json({ id: messageId, status: "sent" });
 }

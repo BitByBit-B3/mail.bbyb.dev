@@ -27,23 +27,6 @@
 			"remote": true
 		}
 	],
-	"queues": {
-		"producers": [
-			{
-				"binding": "OUTBOUND_QUEUE",
-				"queue": "b3-outbound-email"
-			}
-		],
-		"consumers": [
-			{
-				"queue": "b3-outbound-email",
-				"max_batch_size": 5,
-				"max_batch_timeout": 2,
-				"max_retries": 3,
-				"dead_letter_queue": "b3-outbound-email-dlq"
-			}
-		]
-	},
 	"r2_buckets": [
 		{
 			"binding": "BUCKET",
