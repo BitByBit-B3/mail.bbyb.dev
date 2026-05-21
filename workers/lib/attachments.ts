@@ -87,12 +87,6 @@ function sanitizeFilename(filename: string) {
 	return (filename || "untitled").replace(/[\/\\:*?"<>|\x00-\x1f]/g, "_");
 }
 
-function decodeBase64(content: string) {
-	// Strip whitespace — MIME base64 may have \r\n line breaks that atob() rejects
-	const binaryStr = atob(content.replace(/\s/g, ""));
-	return Uint8Array.from(binaryStr, (char) => char.charCodeAt(0));
-}
-
 function encodeBase64(bytes: Uint8Array) {
 	const CHUNK_SIZE = 0x8000;
 	let binary = "";
@@ -115,18 +109,6 @@ async function materializeAttachment(
 	lookupAttachment?: AttachmentLookup,
 	lookupPendingUpload?: PendingUploadLookup,
 ): Promise<MaterializedAttachment> {
-	if (attachment.kind === "upload") {
-		const bytes = decodeBase64(attachment.content);
-		return {
-			filename: sanitizeFilename(attachment.filename),
-			mimetype: attachment.type || "application/octet-stream",
-			size: bytes.byteLength,
-			contentId: attachment.contentId,
-			disposition: attachment.disposition,
-			bytes,
-		};
-	}
-
 	if (attachment.kind === "r2-staged") {
 		// R2 staged attachments live at `uploads/<mailboxId>/<uploadId>`.
 		// The caller (send route) has already validated ownership via the

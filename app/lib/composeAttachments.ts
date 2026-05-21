@@ -6,12 +6,10 @@ import type {
 	ComposeAttachmentPayload,
 	R2StagedComposeAttachment,
 	StoredComposeAttachment,
-	UploadedComposeAttachment,
 } from "shared/compose-attachments";
 import type { Email } from "~/types";
 
 export type ComposeAttachmentItem = (
-	| UploadedComposeAttachment
 	| StoredComposeAttachment
 	| R2StagedComposeAttachment
 ) & {
@@ -30,41 +28,8 @@ export interface UploadProgress {
 	error?: string;
 }
 
-function readFileAsBase64(file: File): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onerror = () => reject(reader.error || new Error(`Failed to read ${file.name}`));
-		reader.onload = () => {
-			const result = reader.result;
-			if (typeof result !== "string") {
-				reject(new Error(`Failed to read ${file.name}`));
-				return;
-			}
-			const [, content = ""] = result.split(",", 2);
-			resolve(content);
-		};
-		reader.readAsDataURL(file);
-	});
-}
-
 function normalizeDisposition(disposition?: string | null): "attachment" | "inline" {
 	return disposition === "inline" ? "inline" : "attachment";
-}
-
-export async function readFilesAsComposeAttachments(
-	files: FileList | File[],
-): Promise<ComposeAttachmentItem[]> {
-	return Promise.all(
-		Array.from(files).map(async (file) => ({
-			localId: crypto.randomUUID(),
-			kind: "upload" as const,
-			filename: file.name || "untitled",
-			type: file.type || "application/octet-stream",
-			size: file.size,
-			content: await readFileAsBase64(file),
-			disposition: "attachment" as const,
-		})),
-	);
 }
 
 export interface UploadStartedItem {

@@ -4,16 +4,6 @@
 
 export type ComposeAttachmentDisposition = "attachment" | "inline";
 
-export interface UploadedComposeAttachment {
-	kind: "upload";
-	filename: string;
-	type: string;
-	size: number;
-	content: string;
-	disposition: ComposeAttachmentDisposition;
-	contentId?: string;
-}
-
 export interface StoredComposeAttachment {
 	kind: "stored";
 	attachmentId: string;
@@ -36,6 +26,5 @@ export interface R2StagedComposeAttachment {
 }
 
 export type ComposeAttachmentPayload =
-	| UploadedComposeAttachment
 	| StoredComposeAttachment
 	| R2StagedComposeAttachment;
