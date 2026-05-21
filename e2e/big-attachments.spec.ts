@@ -103,6 +103,25 @@ test.describe("big attachments — cancel endpoint", () => {
 	});
 });
 
+test.describe("big attachments — download route", () => {
+	test("returns 404 for non-existent token", async ({ request }) => {
+		const res = await request.get(
+			"/d/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/anything.bin",
+		);
+		expect(res.status()).toBe(404);
+	});
+
+	test("download route does NOT require Access JWT", async ({ request }) => {
+		// The 404 above already proves no auth wall, because if Access were guarding
+		// /d/*, we'd see a 302 redirect to the OTP login flow rather than a 404.
+		const res = await request.get(
+			"/d/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/x.bin",
+			{ maxRedirects: 0 },
+		);
+		expect(res.status()).toBe(404);
+	});
+});
+
 test.describe("big attachments — send with r2-staged", () => {
 	test("a small r2-staged file lands as a real attachment in Sent", async ({ request }) => {
 		// 1. Upload a small file via the new pipeline

@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { handleDownload } from "./routes/download";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -118,6 +119,10 @@ app.post("/auth/login", async (c) => {
 app.post("/auth/logout", (_c) => {
 	return new Response(null, { status: 302, headers: { Location: "/auth/login", "Set-Cookie": clearAuthCookie() } });
 });
+
+// Public download links for big attachments — must be reachable by external
+// recipients without the app password gate. Mounted BEFORE the auth middleware.
+app.get("/d/:emailId/:attId/:filename", handleDownload);
 
 // Auth gate for everything else (skipped in dev)
 app.use("*", async (c, next) => {
