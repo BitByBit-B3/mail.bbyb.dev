@@ -107,3 +107,13 @@ export const SendEmailResponseSchema = z.object({
 	id: z.string(),
 	status: z.string(),
 });
+
+export const AttachmentSignRequestSchema = z.object({
+	filename: z.string().min(1).max(255),
+	size: z.number().int().positive().max(5 * 1024 * 1024 * 1024), // 5 GiB
+	type: z.string().min(1).max(128),
+});
+
+export const AttachmentConfirmRequestSchema = z.object({
+	uploadId: z.string().uuid(),
+});

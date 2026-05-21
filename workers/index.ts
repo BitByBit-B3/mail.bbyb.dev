@@ -26,6 +26,7 @@ import {
 } from "./lib/email-helpers";
 import { ComposeAttachmentSchema, SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { handleSignUpload } from "./routes/attachments";
 import { generateEmailDraft } from "./lib/ai";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
@@ -419,6 +420,10 @@ app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppCon
 
 app.post("/api/v1/mailboxes/:mailboxId/emails/:id/reply", handleReplyEmail);
 app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
+
+// -- Big attachments (direct R2 upload) -----------------------------
+
+app.post("/api/v1/mailboxes/:mailboxId/attachments/sign", handleSignUpload);
 
 // -- Folders --------------------------------------------------------
 
